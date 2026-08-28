@@ -1,15 +1,4 @@
-# KDCCE Community Platform (Team Scaffold)
-
-> **This is a blank development scaffold, not the working application.**
-> Every application source file (`.py`/`.js`/`.jsx`) in this repo is empty —
-> only its path exists, matching the original repository file-for-file.
-> Config and dependency files below are real, so setup/install instructions
-> still apply. See [TEAM_ASSIGNMENTS.md](TEAM_ASSIGNMENTS.md) for who owns
-> which files and [CONTRIBUTING.md](CONTRIBUTING.md) for the copy-paste
-> workflow. Original repository (source of truth for all code):
-> https://github.com/ayiekoderrick-8068/kdcce-community-platform
-
----
+# KDCCE Community Platform
 
 Software for Kibera Day Care Centre for the Elderly (KDCCE): a public site
 (programs, gallery, blog, donations, craft shop) today, growing into an
