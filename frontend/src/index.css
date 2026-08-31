@@ -81,12 +81,21 @@ img { display: block; }
   background: linear-gradient(90deg, rgba(7,25,40,.88) 0%, rgba(7,25,40,.57) 48%, rgba(7,25,40,.12) 100%);
 }
 
-.input-k {
-  @apply w-full rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-kInk outline-none transition placeholder:text-kMuted disabled:cursor-not-allowed disabled:opacity-60;
+/* @layer components places this before Tailwind's utilities in the
+ * compiled output, so a utility override in JSX (e.g. "input-k pl-10"
+ * for a search icon) actually wins the cascade instead of losing to
+ * input-k's own px-4 — without the layer, both rules have equal
+ * specificity and input-k's later position in this file made its
+ * padding always win, which is what caused the search icon to overlap
+ * the placeholder text in every search box using this pattern. */
+@layer components {
+  .input-k {
+    @apply w-full rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-kInk outline-none transition placeholder:text-kMuted disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .input-k:focus { border-color: rgb(var(--k-accent-pink)); box-shadow: 0 0 0 3px rgba(192,0,89,.15); }
+  .dark .input-k:focus { box-shadow: 0 0 0 3px rgba(255,111,168,.18); }
+  .input-k:focus-visible { outline: none; }
 }
-.input-k:focus { border-color: rgb(var(--k-accent-pink)); box-shadow: 0 0 0 3px rgba(192,0,89,.15); }
-.dark .input-k:focus { box-shadow: 0 0 0 3px rgba(255,111,168,.18); }
-.input-k:focus-visible { outline: none; }
 
 .btn-orange { @apply inline-flex items-center justify-center gap-2 rounded-xl bg-kOrange px-5 py-3 font-semibold text-white transition hover:bg-kOrangeDark disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-kOrange; }
 .btn-outline { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/70 px-5 py-3 font-semibold text-white transition hover:bg-white hover:text-kGreen disabled:cursor-not-allowed disabled:opacity-60; }

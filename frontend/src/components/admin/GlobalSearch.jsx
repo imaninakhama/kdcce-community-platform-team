@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Search, X } from 'lucide-react'
-import { apiFetch } from '../../lib/api'
+import { apiFetch, clearSession, ApiError } from '../../lib/api'
 
 // Admin/staff only, matching backend/app/search/routes.py exactly — a
 // volunteer has no elderly-record access anywhere else in this app, so
@@ -16,6 +16,7 @@ const CATEGORIES = [
 ]
 
 export default function GlobalSearch() {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [results, setResults] = useState(null)
@@ -28,11 +29,18 @@ export default function GlobalSearch() {
     const handle = setTimeout(() => {
       apiFetch(`/api/search?q=${encodeURIComponent(q.trim())}`)
         .then(d => setResults(d.results))
-        .catch(() => setResults(null))
+        .catch(err => {
+          // A search typo or transient failure just shows "no matches" —
+          // but an expired session (same 1h-token gap as NotificationBell)
+          // should send the user back to login instead of quietly acting
+          // like their search came up empty.
+          if (err instanceof ApiError && err.status === 401) { clearSession(); navigate('/admin/login'); return }
+          setResults(null)
+        })
         .finally(() => setLoading(false))
     }, 300)
     return () => clearTimeout(handle)
-  }, [q])
+  }, [q, navigate])
 
   function close() { setOpen(false); setQ(''); setResults(null) }
 

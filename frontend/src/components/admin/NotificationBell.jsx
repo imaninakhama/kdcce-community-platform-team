@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Bell, Check } from 'lucide-react'
-import { apiFetch } from '../../lib/api'
+import { apiFetch, clearSession, ApiError } from '../../lib/api'
 
 function timeAgo(iso) {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
@@ -13,23 +14,35 @@ function timeAgo(iso) {
 }
 
 export default function NotificationBell({ variant = 'dark' }) {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(false)
   const panelRef = useRef(null)
 
+  // A failed badge refresh shouldn't disrupt the page (silent otherwise) —
+  // except a 401, which means the session itself has expired. Without
+  // this, an idle tab past the access token's 1h lifetime would just poll
+  // this every 60s forever with no way for the user to notice they'd been
+  // signed out; every other data-fetching hook in the app (useApiResource,
+  // VolunteerPortal) already redirects to login on 401 the same way.
+  function redirectIfExpired(err) {
+    if (err instanceof ApiError && err.status === 401) { clearSession(); navigate('/admin/login'); return true }
+    return false
+  }
+
   const loadUnreadCount = useCallback(async () => {
     try { setUnreadCount((await apiFetch('/api/notifications/unread-count')).unread_count) }
-    catch { /* silent — a failed badge refresh shouldn't disrupt the page */ }
-  }, [])
+    catch (err) { redirectIfExpired(err) }
+  }, [navigate])
 
   const loadList = useCallback(async () => {
     setLoading(true)
     try { setNotifications((await apiFetch('/api/notifications?per_page=8')).notifications) }
-    catch { /* silent */ }
+    catch (err) { redirectIfExpired(err) }
     finally { setLoading(false) }
-  }, [])
+  }, [navigate])
 
   useEffect(() => {
     loadUnreadCount()
@@ -46,7 +59,7 @@ export default function NotificationBell({ variant = 'dark' }) {
       await apiFetch(`/api/notifications/${notification.id}`, { method: 'PATCH', body: { is_read: true } })
       setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n))
       loadUnreadCount()
-    } catch { /* silent */ }
+    } catch (err) { redirectIfExpired(err) }
   }
 
   async function markAllRead() {
@@ -54,7 +67,7 @@ export default function NotificationBell({ variant = 'dark' }) {
       await apiFetch('/api/notifications/mark-all-read', { method: 'POST' })
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
       setUnreadCount(0)
-    } catch { /* silent */ }
+    } catch (err) { redirectIfExpired(err) }
   }
 
   const iconClass = variant === 'dark' ? 'text-white/70 hover:text-white' : 'text-kMuted hover:text-kInk'
