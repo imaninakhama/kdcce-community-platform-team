@@ -1,82 +1,143 @@
-from marshmallow import Schema, fields, validate, validates_schema, ValidationError
+import uuid
 
-from ..models import DONATION_FREQUENCIES, DONATION_STATUSES, DONATION_TYPES
+from flask import Blueprint, jsonify, request
+from marshmallow import ValidationError
 
-ALLOWED_CURRENCIES = ("KES",)
-ALLOWED_PAYMENT_METHODS = ("M-Pesa", "Card (Stripe)", "PayPal")
+from ..auth.decorators import roles_required
+from ..extensions import db, limiter
+from ..models import Donation, utcnow
+from ..utils import csv_response, get_or_404, validation_error_response
+from .schemas import AdminDonationCreateSchema, DonationCreateSchema, DonationUpdateSchema
 
+bp = Blueprint("donations", __name__)
 
-class DonationCreateSchema(Schema):
-    """Used by the public POST /api/donations endpoint — Cash only, and
-    unchanged since before donation_type existed. Deliberately has no
-    "status" or "donation_type" field — both are always server-set, never
-    trusted from the client. See the note on Donation.status in models.py.
-    In-kind (Food/Equipment) donations are staff-logged only, via
-    AdminDonationCreateSchema below — there's no public self-service path
-    for "I dropped off a bag of rice.\""""
+public_create_schema = DonationCreateSchema()
+admin_create_schema = AdminDonationCreateSchema()
+update_schema = DonationUpdateSchema()
 
-    donor_name = fields.String(required=True, validate=validate.Length(min=1, max=120))
-    donor_email = fields.Email(required=True)
-    donor_phone = fields.String(load_default=None, validate=validate.Length(max=40))
-    amount = fields.Decimal(required=True, as_string=False, places=2, validate=validate.Range(min=1))
-    currency = fields.String(load_default="KES", validate=validate.OneOf(ALLOWED_CURRENCIES))
-    frequency = fields.String(required=True, validate=validate.OneOf(DONATION_FREQUENCIES))
-    campaign = fields.String(load_default=None, validate=validate.Length(max=120))
-    payment_method = fields.String(load_default=None, validate=validate.OneOf(ALLOWED_PAYMENT_METHODS))
-    message = fields.String(load_default=None, validate=validate.Length(max=2000))
+CSV_HEADER = [
+    "Donor", "Email", "Amount", "Currency", "Frequency", "Campaign", "Payment Method",
+    "Status", "Transaction ID", "Receipt ID", "Date", "Type", "Item Description", "Quantity", "Unit",
+]
 
 
-class AdminDonationCreateSchema(Schema):
-    """Staff/admin logging a donation received in person — any type,
-    including a cash gift handed over rather than paid through the public
-    form. Field requirements differ by donation_type; see
-    _check_type_specific_fields."""
-
-    donation_type = fields.String(required=True, validate=validate.OneOf(DONATION_TYPES))
-    donor_name = fields.String(required=True, validate=validate.Length(min=1, max=120))
-    donor_email = fields.Email(load_default=None, allow_none=True)
-    donor_phone = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=40))
-    amount = fields.Decimal(load_default=None, allow_none=True, as_string=False, places=2, validate=validate.Range(min=0.01))
-    currency = fields.String(load_default="KES", validate=validate.OneOf(ALLOWED_CURRENCIES))
-    payment_method = fields.String(load_default=None, allow_none=True, validate=validate.OneOf(ALLOWED_PAYMENT_METHODS))
-    campaign = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=120))
-    item_description = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=1000))
-    quantity = fields.Decimal(load_default=None, allow_none=True, as_string=False, places=2, validate=validate.Range(min=0.01))
-    unit = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=30))
-    message = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=2000))
-
-    @validates_schema
-    def _check_type_specific_fields(self, data, **kwargs):
-        errors = {}
-        if data["donation_type"] == "Cash":
-            if data.get("amount") is None:
-                errors.setdefault("amount", []).append("Required for a cash donation.")
-        else:
-            if not data.get("item_description"):
-                errors.setdefault("item_description", []).append("Required for an in-kind donation.")
-            if data.get("quantity") is None:
-                errors.setdefault("quantity", []).append("Required for an in-kind donation.")
-            if not data.get("unit"):
-                errors.setdefault("unit", []).append("Required for an in-kind donation.")
-        if errors:
-            raise ValidationError(errors)
+def _generate_receipt_id():
+    year = utcnow().year
+    count = Donation.query.filter(Donation.receipt_id.like(f"KDCCE-{year}-%")).count()
+    return f"KDCCE-{year}-{str(count + 1).zfill(6)}"
 
 
-class DonationUpdateSchema(Schema):
-    """Admin/staff-only edit. Unlike creation, status IS editable here —
-    it's an authenticated internal workflow change, not a payment claim.
-    No load_default on any field (including the new ones): omitted on a
-    partial PATCH must mean "leave it alone," never "reset it.\""""
+def _generate_txn_id():
+    return f"TXN-{uuid.uuid4().hex[:12].upper()}"
 
-    donation_type = fields.String(validate=validate.OneOf(DONATION_TYPES))
-    donor_name = fields.String(validate=validate.Length(min=1, max=120))
-    donor_email = fields.Email(allow_none=True)
-    donor_phone = fields.String(allow_none=True, validate=validate.Length(max=40))
-    amount = fields.Decimal(allow_none=True, as_string=False, places=2, validate=validate.Range(min=0.01))
-    frequency = fields.String(validate=validate.OneOf(DONATION_FREQUENCIES))
-    campaign = fields.String(allow_none=True, validate=validate.Length(max=120))
-    payment_method = fields.String(allow_none=True, validate=validate.OneOf(ALLOWED_PAYMENT_METHODS))
-    item_description = fields.String(allow_none=True, validate=validate.Length(max=1000))
-    quantity = fields.Decimal(allow_none=True, as_string=False, places=2, validate=validate.Range(min=0.01))
-    unit = fields.String(allow_none=True, validate=validate.Length(max=30))
-    status = fields.String(validate=validate.OneOf(DONATION_STATUSES))
+
+@bp.post("/api/donations")
+@limiter.limit("10 per minute")
+def create_public_donation():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = public_create_schema.load(payload)
+    except ValidationError as err:
+        return validation_error_response(err)
+
+    donation = Donation(
+        donation_type="Cash",
+        donor_name=data["donor_name"],
+        donor_email=data["donor_email"],
+        donor_phone=data.get("donor_phone"),
+        amount=data["amount"],
+        currency=data["currency"],
+        frequency=data["frequency"],
+        campaign=data.get("campaign"),
+        payment_method=data.get("payment_method"),
+        message=data.get("message"),
+        status="Paid",
+        txn_id=_generate_txn_id(),
+        receipt_id=_generate_receipt_id(),
+    )
+    db.session.add(donation)
+    db.session.commit()
+    return jsonify(donation=donation.to_dict()), 201
+
+
+@bp.post("/api/admin/donations")
+@roles_required("admin", "staff")
+def create_admin_donation():
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = admin_create_schema.load(payload)
+    except ValidationError as err:
+        return validation_error_response(err)
+
+    donation_type = data["donation_type"]
+    donation = Donation(
+        donation_type=donation_type,
+        donor_name=data["donor_name"],
+        donor_email=data.get("donor_email"),
+        donor_phone=data.get("donor_phone"),
+        amount=data.get("amount"),
+        currency=data["currency"],
+        payment_method=data.get("payment_method") if donation_type == "Cash" else None,
+        campaign=data.get("campaign"),
+        item_description=data.get("item_description"),
+        quantity=data.get("quantity"),
+        unit=data.get("unit"),
+        message=data.get("message"),
+        status="Paid" if donation_type == "Cash" else "Received",
+        frequency="one-time",
+        txn_id=_generate_txn_id(),
+        receipt_id=_generate_receipt_id(),
+    )
+    db.session.add(donation)
+    db.session.commit()
+    return jsonify(donation=donation.to_dict()), 201
+
+
+@bp.get("/api/donations")
+@roles_required("admin", "staff")
+def list_donations():
+    query = Donation.query
+    donation_type = request.args.get("donation_type")
+    if donation_type:
+        query = query.filter(Donation.donation_type == donation_type)
+    donations = query.order_by(Donation.created_at.desc()).all()
+    return jsonify(donations=[d.to_dict() for d in donations]), 200
+
+
+@bp.get("/api/donations/export.csv")
+@roles_required("admin", "staff")
+def export_donations_csv():
+    donations = Donation.query.order_by(Donation.created_at.desc()).all()
+    rows = [
+        [
+            d.donor_name, d.donor_email or "", d.amount if d.amount is not None else "", d.currency,
+            d.frequency, d.campaign or "", d.payment_method or "", d.status, d.txn_id, d.receipt_id,
+            d.created_at.isoformat(), d.donation_type, d.item_description or "",
+            d.quantity if d.quantity is not None else "", d.unit or "",
+        ]
+        for d in donations
+    ]
+    return csv_response("donations.csv", CSV_HEADER, rows)
+
+
+@bp.get("/api/donations/<int:donation_id>")
+@roles_required("admin", "staff")
+def get_donation(donation_id):
+    donation = get_or_404(Donation, donation_id)
+    return jsonify(donation=donation.to_dict()), 200
+
+
+@bp.patch("/api/donations/<int:donation_id>")
+@roles_required("admin", "staff")
+def update_donation(donation_id):
+    donation = get_or_404(Donation, donation_id)
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = update_schema.load(payload, partial=True)
+    except ValidationError as err:
+        return validation_error_response(err)
+
+    for field, value in data.items():
+        setattr(donation, field, value)
+    db.session.commit()
+    return jsonify(donation=donation.to_dict()), 200
