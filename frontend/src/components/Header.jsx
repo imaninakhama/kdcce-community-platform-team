@@ -8,7 +8,6 @@ const nav = [
   ['Home', '/'],
   ['About Us', '/about'],
   ['Programs', '/programs'],
-  ['Impact', '/about#impact'],
   ['Gallery', '/gallery'],
   ['Get Involved', '/sponsor'],
   ['Contact', '/contact']
@@ -25,7 +24,7 @@ export default function Header() {
 
         <nav className="hidden items-center gap-7 lg:flex">
           {nav.map(([label, to]) => (
-            <NavLink key={label} to={to} className={({ isActive }) => `relative text-[13px] font-semibold ${isActive ? 'text-kOrange' : 'text-kInk'} transition`}>
+            <NavLink key={label} to={to} end className={({ isActive }) => `relative text-[13px] font-semibold ${isActive ? 'text-kOrange' : 'text-kInk'} transition`}>
               {label}
               {label === 'Get Involved' && <ChevronDown className="ml-1 inline h-3 w-3" />}
             </NavLink>
