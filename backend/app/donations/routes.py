@@ -6,6 +6,7 @@ from marshmallow import ValidationError
 from ..auth.decorators import roles_required
 from ..extensions import db, limiter
 from ..models import Donation, utcnow
+from ..mpesa.service import MpesaError, initiate_stk_push, normalize_phone
 from ..utils import csv_response, get_or_404, validation_error_response
 from .schemas import AdminDonationCreateSchema, DonationCreateSchema, DonationUpdateSchema
 
@@ -40,6 +41,9 @@ def create_public_donation():
     except ValidationError as err:
         return validation_error_response(err)
 
+    if data.get("payment_method") == "M-Pesa":
+        return _create_mpesa_donation(data)
+
     donation = Donation(
         donation_type="Cash",
         donor_name=data["donor_name"],
@@ -58,6 +62,65 @@ def create_public_donation():
     db.session.add(donation)
     db.session.commit()
     return jsonify(donation=donation.to_dict()), 201
+
+
+def _create_mpesa_donation(data):
+    """No other payment method here goes through a real gateway (see the
+    note on Donation.status in models.py) — M-Pesa is the one exception,
+    via Safaricom's Daraja STK push. The donation is created Pending, an
+    STK push is sent to the donor's phone, and status only ever becomes
+    Paid once Safaricom's own async callback confirms it
+    (app/mpesa/routes.py) — never optimistically here."""
+    phone = normalize_phone(data.get("donor_phone") or "")
+    if not phone:
+        return jsonify(
+            error="Validation failed",
+            details={"donor_phone": ["A valid Safaricom number is required for M-Pesa, e.g. 07XXXXXXXX."]},
+        ), 400
+
+    donation = Donation(
+        donation_type="Cash",
+        donor_name=data["donor_name"],
+        donor_email=data["donor_email"],
+        donor_phone=data.get("donor_phone"),
+        amount=data["amount"],
+        currency=data["currency"],
+        frequency=data["frequency"],
+        campaign=data.get("campaign"),
+        payment_method="M-Pesa",
+        message=data.get("message"),
+        status="Pending",
+        txn_id=_generate_txn_id(),
+        receipt_id=_generate_receipt_id(),
+    )
+    db.session.add(donation)
+    db.session.flush()  # assigns donation.id/receipt_id before it's used as the STK account reference
+
+    try:
+        checkout_id = initiate_stk_push(
+            phone=phone, amount=donation.amount, account_reference=donation.receipt_id,
+            transaction_desc="KDCCE Donation",
+        )
+    except MpesaError as err:
+        db.session.rollback()
+        return jsonify(error=str(err)), 502
+
+    donation.mpesa_checkout_request_id = checkout_id
+    db.session.commit()
+    return jsonify(donation=donation.to_dict()), 201
+
+
+@bp.get("/api/donations/<int:donation_id>/status")
+@limiter.limit("30 per minute")
+def get_donation_status(donation_id):
+    """Public and deliberately narrow — lets the donor's own browser poll
+    for their M-Pesa result without exposing the admin-only full donation
+    record (get_donation below) to an unauthenticated caller."""
+    donation = get_or_404(Donation, donation_id)
+    return jsonify(
+        status=donation.status, receipt_id=donation.receipt_id, txn_id=donation.txn_id,
+        mpesa_receipt_number=donation.mpesa_receipt_number,
+    ), 200
 
 
 @bp.post("/api/admin/donations")
