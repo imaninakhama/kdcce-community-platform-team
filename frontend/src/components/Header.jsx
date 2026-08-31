@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Heart, Menu, X, ChevronDown } from 'lucide-react'
 import { PrimaryButton } from './Button'
 import ThemeToggle from '../theme/ThemeToggle'
@@ -16,6 +16,17 @@ const nav = [
 
 export default function Header() {
   const [open, setOpen] = useState(false)
+  const location = useLocation()
+
+  // NavLink's default active-matching only looks at the pathname, so
+  // '/about' and '/about#impact' — same path, different hash — would both
+  // light up together. Match path AND hash explicitly instead.
+  const isNavActive = (to) => {
+    const [path, hash] = to.split('#')
+    if (path !== location.pathname) return false
+    return hash ? location.hash === `#${hash}` : !location.hash
+  }
+
   return (
     <header className="sticky top-0 z-50 bg-kSurface/95 backdrop-blur glass-nav">
       <div className="container-k flex min-h-[82px] items-center justify-between gap-6 py-2">
@@ -25,10 +36,10 @@ export default function Header() {
 
         <nav className="hidden items-center gap-7 lg:flex">
           {nav.map(([label, to]) => (
-            <NavLink key={label} to={to} className={({ isActive }) => `relative text-[13px] font-semibold ${isActive ? 'text-kOrange' : 'text-kInk'} transition`}>
+            <Link key={label} to={to} className={`relative text-[13px] font-semibold ${isNavActive(to) ? 'text-kOrange' : 'text-kInk'} transition`}>
               {label}
               {label === 'Get Involved' && <ChevronDown className="ml-1 inline h-3 w-3" />}
-            </NavLink>
+            </Link>
           ))}
         </nav>
 
