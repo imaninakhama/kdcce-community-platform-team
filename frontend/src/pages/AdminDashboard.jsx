@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { Routes, Route, Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Routes, Route, Link, Navigate } from 'react-router-dom'
 import { BarChart3, Search, Plus, Trash2, Pencil, ChevronDown, Settings } from 'lucide-react'
 import Modal from '../components/admin/Modal'
 import Toast from '../components/admin/Toast'
 import Shell from '../components/admin/Shell'
 import { useToast, errorMessage, LoadingState, ErrorState } from '../components/admin/adminHelpers'
 import { useApiResource } from '../lib/useApiResource'
+import { apiFetch, clearSession, getToken } from '../lib/api'
 import ElderlyManager from './admin/ElderlyManager'
 import ElderlyProfile from './admin/ElderlyProfile'
 import FollowUpsManager from './admin/FollowUpsManager'
@@ -220,7 +221,13 @@ function SettingsPage({ showToast }) {
   </div></Shell>
 }
 
-export default function AdminDashboard() {
+// Only mounted once AdminDashboard below has positively confirmed the
+// session is valid — every useApiResource hook here fetches on mount, so
+// none of this (or the Shell/nav it renders inside) must exist in the
+// component tree until auth is confirmed, or those calls would fire, and
+// this content would flash, while a stale/expired/missing token is still
+// being checked.
+function AdminDashboardRoutes() {
   const donationsApi = useApiResource('/api/donations', { listKey: 'donations', itemKey: 'donation' })
   const blogApi = useApiResource('/api/admin/blog', { listKey: 'posts', itemKey: 'post' })
   const galleryApi = useApiResource('/api/gallery', { listKey: 'images', itemKey: 'image' })
@@ -273,4 +280,30 @@ export default function AdminDashboard() {
     </Routes>
     <Toast message={toast} />
   </>
+}
+
+function AuthChecking() {
+  return <div className="grid min-h-[80vh] place-items-center bg-kCream text-sm font-semibold text-kMuted">Checking your session…</div>
+}
+
+// Gate for every /admin/* route except /admin/login: verifies the stored
+// token against the server (a token can be present but expired/revoked)
+// before AdminDashboardRoutes — and the Shell/data/nav it renders — ever
+// mounts, so an unauthenticated visit goes straight to the login form
+// with no dashboard flash.
+export default function AdminDashboard() {
+  const [status, setStatus] = useState('checking') // 'checking' | 'authenticated' | 'unauthenticated'
+
+  useEffect(() => {
+    let cancelled = false
+    if (!getToken()) { setStatus('unauthenticated'); return }
+    apiFetch('/api/auth/me')
+      .then(() => { if (!cancelled) setStatus('authenticated') })
+      .catch(() => { clearSession(); if (!cancelled) setStatus('unauthenticated') })
+    return () => { cancelled = true }
+  }, [])
+
+  if (status === 'checking') return <AuthChecking />
+  if (status === 'unauthenticated') return <Navigate to="/admin/login" replace />
+  return <AdminDashboardRoutes />
 }
