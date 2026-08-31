@@ -98,6 +98,7 @@ def _register_blueprints(app):
     from .incidents.routes import bp as incidents_bp
     from .inventory.routes import bp as inventory_bp
     from .medication.routes import bp as medication_bp
+    from .mpesa.routes import bp as mpesa_bp
     from .notifications.routes import bp as notifications_bp
     from .reports.routes import bp as reports_bp
     from .search.routes import bp as search_bp
@@ -107,7 +108,7 @@ def _register_blueprints(app):
     for bp in (
         activities_bp, analytics_bp, assistance_bp, attendance_bp, auth_bp, blog_bp, calendar_bp,
         crafts_bp, donations_bp, elderly_bp, feeding_bp, followups_bp, gallery_bp, health_bp,
-        homevisits_bp, inbox_bp, inbox_admin_bp, incidents_bp, inventory_bp, medication_bp,
+        homevisits_bp, inbox_bp, inbox_admin_bp, incidents_bp, inventory_bp, medication_bp, mpesa_bp,
         notifications_bp, reports_bp, search_bp, team_bp, volunteers_bp,
     ):
         app.register_blueprint(bp)

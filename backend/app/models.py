@@ -36,7 +36,7 @@ MEAL_TYPES = ("Breakfast", "Lunch", "Snack", "Special")
 INVENTORY_CATEGORIES = ("Food", "Medical", "Hygiene", "Equipment", "Other")
 STOCK_MOVEMENT_TYPES = ("In", "Out")
 DONATION_TYPES = ("Cash", "Food", "Equipment")
-DONATION_STATUSES = ("Paid", "Pending", "Received")
+DONATION_STATUSES = ("Paid", "Pending", "Received", "Failed")
 DONATION_FREQUENCIES = ("one-time", "monthly")
 CRAFT_STATUSES = ("Available", "Reserved", "Sold")
 BLOG_STATUSES = ("Draft", "Published")
@@ -741,6 +741,13 @@ class Donation(db.Model):
     txn_id = db.Column(db.String(60), nullable=False, unique=True)
     receipt_id = db.Column(db.String(60), nullable=False, unique=True)
     message = db.Column(db.Text)
+    # Set only for an M-Pesa donation while its STK push is outstanding —
+    # the one thing Safaricom's async callback gives us to find the right
+    # row again. mpesa_receipt_number is Safaricom's own receipt code,
+    # filled in once the callback confirms payment; kept separate from our
+    # own server-generated txn_id/receipt_id rather than overwriting them.
+    mpesa_checkout_request_id = db.Column(db.String(50), unique=True)
+    mpesa_receipt_number = db.Column(db.String(30))
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, index=True)
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
 
@@ -762,6 +769,7 @@ class Donation(db.Model):
             "status": self.status,
             "txn_id": self.txn_id,
             "receipt_id": self.receipt_id,
+            "mpesa_receipt_number": self.mpesa_receipt_number,
             "message": self.message,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),

@@ -21,6 +21,22 @@ class Config:
     # app/assignments/service.py.
     MAX_CONTENT_LENGTH = 8 * 1024 * 1024
 
+    # Daraja (M-Pesa) sandbox — see backend/.env.example for how to get
+    # these. MPESA_SHORTCODE/MPESA_PASSKEY default to Safaricom's published
+    # shared sandbox test values, so only the account-specific Consumer
+    # Key/Secret and a public callback URL are required to actually enable
+    # payments (app/mpesa/service.py logs a clear error instead of a
+    # confusing failure if either is left unset).
+    MPESA_ENV = os.environ.get("MPESA_ENV", "sandbox")
+    MPESA_CONSUMER_KEY = os.environ.get("MPESA_CONSUMER_KEY")
+    MPESA_CONSUMER_SECRET = os.environ.get("MPESA_CONSUMER_SECRET")
+    MPESA_SHORTCODE = os.environ.get("MPESA_SHORTCODE", "174379")
+    MPESA_PASSKEY = os.environ.get("MPESA_PASSKEY", "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919")
+    # Must be a publicly reachable URL — Safaricom's servers call this
+    # directly, so localhost never works. Point it at an ngrok (or similar)
+    # tunnel in dev: e.g. https://<your-id>.ngrok-free.app/api/mpesa/callback
+    MPESA_CALLBACK_URL = os.environ.get("MPESA_CALLBACK_URL")
+
 
 class TestingConfig(Config):
     TESTING = True
