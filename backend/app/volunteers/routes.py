@@ -2,17 +2,35 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 
+from ..achievements.service import check_and_award, current_achievement_value
 from ..auth.decorators import roles_required
 from ..extensions import db
-from ..models import AssistanceRequest, FollowUp, HomeVisit, VolunteerProfile, utcnow
+from ..models import (
+    Achievement, AssistanceRequest, FollowUp, HomeVisit, VolunteerAchievement, VolunteerHours,
+    VolunteerProfile, utcnow,
+)
 from ..notifications.service import notify
 from ..utils import get_or_404, validation_error_response
-from .schemas import VolunteerSelfUpdateSchema, VolunteerStaffUpdateSchema
+from ..volunteer_hours import service as hours_service
+from .schemas import (
+    ManualHoursCreateSchema, ManualHoursReviewSchema, RecognitionCreateSchema,
+    VolunteerSelfUpdateSchema, VolunteerStaffUpdateSchema,
+)
 
 bp = Blueprint("volunteers", __name__, url_prefix="/api/volunteers")
 
 self_schema = VolunteerSelfUpdateSchema()
 staff_schema = VolunteerStaffUpdateSchema()
+manual_hours_schema = ManualHoursCreateSchema()
+manual_hours_review_schema = ManualHoursReviewSchema()
+recognition_schema = RecognitionCreateSchema()
+
+
+def _my_profile_or_error():
+    profile = VolunteerProfile.query.filter_by(user_id=int(get_jwt_identity())).first()
+    if profile is None:
+        return None, (jsonify(error="No volunteer profile on this account"), 404)
+    return profile, None
 
 
 def _is_verified_volunteer(user_id):
@@ -204,3 +222,182 @@ def update_volunteer(volunteer_id):
         setattr(profile, field, value)
     db.session.commit()
     return jsonify(volunteer=profile.to_dict()), 200
+
+
+# ---------- Hours ----------
+
+@bp.get("/me/hours")
+@jwt_required()
+def get_my_hours():
+    profile, err = _my_profile_or_error()
+    if err:
+        return err
+    return jsonify(hours=hours_service.summary(int(get_jwt_identity()), profile.id)), 200
+
+
+@bp.get("/me/hours/entries")
+@jwt_required()
+def list_my_manual_hours():
+    profile, err = _my_profile_or_error()
+    if err:
+        return err
+    entries = VolunteerHours.query.filter_by(volunteer_profile_id=profile.id).order_by(VolunteerHours.date.desc()).all()
+    return jsonify(entries=[e.to_dict() for e in entries]), 200
+
+
+@bp.post("/me/hours")
+@jwt_required()
+def submit_my_hours():
+    profile, err = _my_profile_or_error()
+    if err:
+        return err
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = manual_hours_schema.load(payload)
+    except ValidationError as err:
+        return validation_error_response(err)
+    entry = VolunteerHours(volunteer_profile_id=profile.id, **data, status="Pending")
+    db.session.add(entry)
+    db.session.commit()
+    return jsonify(entry=entry.to_dict()), 201
+
+
+@bp.patch("/hours/<int:hours_id>")
+@roles_required("admin", "staff")
+def review_manual_hours(hours_id):
+    """Reviewed by its own id, not nested under a volunteer id — a
+    manual-hours entry is uniquely identified on its own."""
+    entry = get_or_404(VolunteerHours, hours_id)
+    if entry.status != "Pending":
+        return jsonify(error=f"This entry has already been {entry.status.lower()}"), 409
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = manual_hours_review_schema.load(payload)
+    except ValidationError as err:
+        return validation_error_response(err)
+
+    entry.status = data["status"]
+    entry.rejection_reason = data.get("rejection_reason") if data["status"] == "Rejected" else None
+    entry.approved_by_id = int(get_jwt_identity())
+    entry.approved_at = utcnow()
+    db.session.flush()
+
+    if entry.status == "Approved":
+        check_and_award(entry.volunteer_profile.user_id, entry.volunteer_profile_id)
+
+    db.session.commit()
+    return jsonify(entry=entry.to_dict()), 200
+
+
+@bp.get("/<int:volunteer_id>/hours")
+@roles_required("admin", "staff")
+def get_volunteer_hours(volunteer_id):
+    profile = get_or_404(VolunteerProfile, volunteer_id)
+    return jsonify(hours=hours_service.summary(profile.user_id, profile.id)), 200
+
+
+# ---------- Performance ----------
+
+def _performance(profile):
+    completed_visits = HomeVisit.query.filter_by(assigned_to_id=profile.user_id, status="Completed").count()
+    completed_assistance = AssistanceRequest.query.filter_by(assigned_to_id=profile.user_id, status="Completed").count()
+    cancelled_visits = HomeVisit.query.filter_by(assigned_to_id=profile.user_id, status="Cancelled").count()
+    cancelled_assistance = AssistanceRequest.query.filter_by(assigned_to_id=profile.user_id, status="Cancelled").count()
+    total_visits = HomeVisit.query.filter_by(assigned_to_id=profile.user_id).count()
+    total_assistance = AssistanceRequest.query.filter_by(assigned_to_id=profile.user_id).count()
+    completed = completed_visits + completed_assistance
+    cancelled = cancelled_visits + cancelled_assistance
+    total = total_visits + total_assistance
+    decided = completed + cancelled
+    hours = hours_service.summary(profile.user_id, profile.id)
+    return {
+        "total_service_minutes": hours["minutes_lifetime"],
+        "minutes_this_month": hours["minutes_this_month"],
+        "completed_home_visits": completed_visits,
+        "completed_assistance_requests": completed_assistance,
+        "total_completed_assignments": completed,
+        "pending_assignments": total - completed - cancelled,
+        "cancelled_assignments": cancelled,
+        "completion_rate": round((completed / decided) * 100) if decided > 0 else None,
+    }
+
+
+@bp.get("/me/performance")
+@jwt_required()
+def get_my_performance():
+    profile, err = _my_profile_or_error()
+    if err:
+        return err
+    return jsonify(performance=_performance(profile)), 200
+
+
+@bp.get("/<int:volunteer_id>/performance")
+@roles_required("admin", "staff")
+def get_volunteer_performance(volunteer_id):
+    profile = get_or_404(VolunteerProfile, volunteer_id)
+    return jsonify(performance=_performance(profile)), 200
+
+
+# ---------- Achievements & recognition ----------
+
+def _achievements_payload(profile):
+    earned = VolunteerAchievement.query.filter_by(volunteer_profile_id=profile.id).order_by(VolunteerAchievement.awarded_at.desc()).all()
+    earned_ids = {va.achievement_id for va in earned}
+    candidates = Achievement.query.filter(Achievement.active.is_(True), Achievement.threshold_type != "manual").all()
+    upcoming = [
+        {**a.to_dict(), "current_value": current_achievement_value(a.threshold_type, profile.user_id, profile.id)}
+        for a in candidates if a.id not in earned_ids
+    ]
+    return {"earned": [va.to_dict() for va in earned], "upcoming": upcoming}
+
+
+@bp.get("/me/achievements")
+@jwt_required()
+def get_my_achievements():
+    profile, err = _my_profile_or_error()
+    if err:
+        return err
+    return jsonify(achievements=_achievements_payload(profile)), 200
+
+
+@bp.get("/<int:volunteer_id>/achievements")
+@roles_required("admin", "staff")
+def get_volunteer_achievements(volunteer_id):
+    profile = get_or_404(VolunteerProfile, volunteer_id)
+    return jsonify(achievements=_achievements_payload(profile)), 200
+
+
+@bp.post("/<int:volunteer_id>/recognition")
+@roles_required("admin", "staff")
+def recognize_volunteer(volunteer_id):
+    """Recognition IS an achievement award — same VolunteerAchievement
+    table, source="manual" — not a parallel awards system. Only accepts
+    an achievement_id whose threshold_type is "manual" (Volunteer of the
+    Month, Community Champion, ...); a threshold-based one is only ever
+    earned automatically, never handed out manually."""
+    profile = get_or_404(VolunteerProfile, volunteer_id)
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = recognition_schema.load(payload)
+    except ValidationError as err:
+        return validation_error_response(err)
+
+    achievement = db.session.get(Achievement, data["achievement_id"])
+    if achievement is None or not achievement.active or achievement.threshold_type != "manual":
+        return jsonify(error="Validation failed", details={"achievement_id": ["Not a valid recognition award"]}), 400
+    if VolunteerAchievement.query.filter_by(volunteer_profile_id=profile.id, achievement_id=achievement.id).first():
+        return jsonify(error=f'{profile.user.name} has already received "{achievement.name}"'), 409
+
+    record = VolunteerAchievement(
+        volunteer_profile_id=profile.id, achievement_id=achievement.id, source="manual",
+        awarded_by_id=int(get_jwt_identity()), notes=data.get("notes"),
+    )
+    db.session.add(record)
+    db.session.flush()
+    notify(
+        profile.user_id, "Achievement Awarded", f'You\'ve been recognized: "{achievement.name}"!',
+        data.get("notes") or achievement.description or f"You've been awarded {achievement.name}.",
+        related_resource_type="achievement", related_resource_id=achievement.id,
+    )
+    db.session.commit()
+    return jsonify(recognition=record.to_dict()), 201

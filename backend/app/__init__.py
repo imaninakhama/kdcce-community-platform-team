@@ -78,10 +78,12 @@ def _register_jwt_callbacks():
 
 
 def _register_blueprints(app):
+    from .achievements.routes import bp as achievements_bp
     from .activities.routes import bp as activities_bp
     from .analytics.routes import bp as analytics_bp
     from .assistance.routes import bp as assistance_bp
     from .attendance.routes import bp as attendance_bp
+    from .audit.routes import bp as audit_bp
     from .auth.routes import bp as auth_bp
     from .blog.routes import bp as blog_bp
     from .calendar.routes import bp as calendar_bp
@@ -97,19 +99,23 @@ def _register_blueprints(app):
     from .inbox.routes import bp as inbox_bp
     from .incidents.routes import bp as incidents_bp
     from .inventory.routes import bp as inventory_bp
+    from .login_history.routes import bp as login_history_bp
     from .medication.routes import bp as medication_bp
     from .mpesa.routes import bp as mpesa_bp
     from .notifications.routes import bp as notifications_bp
     from .reports.routes import bp as reports_bp
     from .search.routes import bp as search_bp
+    from .sessions.routes import bp as sessions_bp
     from .team.routes import bp as team_bp
+    from .users.routes import bp as users_bp
     from .volunteers.routes import bp as volunteers_bp
 
     for bp in (
-        activities_bp, analytics_bp, assistance_bp, attendance_bp, auth_bp, blog_bp, calendar_bp,
-        crafts_bp, donations_bp, elderly_bp, feeding_bp, followups_bp, gallery_bp, health_bp,
-        homevisits_bp, inbox_bp, inbox_admin_bp, incidents_bp, inventory_bp, medication_bp, mpesa_bp,
-        notifications_bp, reports_bp, search_bp, team_bp, volunteers_bp,
+        achievements_bp, activities_bp, analytics_bp, assistance_bp, attendance_bp, audit_bp, auth_bp,
+        blog_bp, calendar_bp, crafts_bp, donations_bp, elderly_bp, feeding_bp, followups_bp, gallery_bp,
+        health_bp, homevisits_bp, inbox_bp, inbox_admin_bp, incidents_bp, inventory_bp, login_history_bp,
+        medication_bp, mpesa_bp, notifications_bp, reports_bp, search_bp, sessions_bp, team_bp, users_bp,
+        volunteers_bp,
     ):
         app.register_blueprint(bp)
 

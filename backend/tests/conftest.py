@@ -5,8 +5,9 @@ import pytest
 from flask_jwt_extended import create_access_token
 
 from app import create_app
+from app.achievements.seed_data import DEFAULT_ACHIEVEMENTS
 from app.extensions import db, limiter
-from app.models import User
+from app.models import Achievement, User
 
 _email_counter = itertools.count(1)
 
@@ -17,6 +18,12 @@ def app():
         flask_app = create_app("testing", instance_path=instance_dir)
         with flask_app.app_context():
             db.create_all()
+            # db.create_all() builds tables from the models directly and never
+            # runs a migration's data-seed step — mirror the migration's
+            # achievement seeding here so achievement-award tests have rows
+            # to award.
+            db.session.bulk_save_objects([Achievement(**data) for data in DEFAULT_ACHIEVEMENTS])
+            db.session.commit()
             # The rate limiter's storage is a process-wide singleton (shared
             # across every test's Flask app) — reset it per test so one
             # test's calls never count against another's limit.
