@@ -84,7 +84,19 @@ def test_donation_status_endpoint_is_public(client, monkeypatch):
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["status"] == "Pending"
-    assert body["receipt_id"] == donation["receipt_id"]
+
+
+def test_pending_status_never_includes_receipt_fields(client, monkeypatch):
+    # An STK push having been sent is not a successful payment — the
+    # frontend must have nothing it could use to render a receipt while
+    # still waiting on Safaricom's callback.
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_pending_case")
+    donation = client.post("/api/donations", json=VALID_MPESA_DONATION).get_json()["donation"]
+
+    body = client.get(f"/api/donations/{donation['id']}/status").get_json()
+    assert "receipt_id" not in body
+    assert "txn_id" not in body
+    assert "mpesa_receipt_number" not in body
 
 
 def test_callback_marks_donation_paid_on_success(client, monkeypatch, app):
@@ -115,6 +127,8 @@ def test_callback_marks_donation_paid_on_success(client, monkeypatch, app):
     status = client.get(f"/api/donations/{donation['id']}/status").get_json()
     assert status["status"] == "Paid"
     assert status["mpesa_receipt_number"] == "NLJ7RT61SV"
+    assert status["receipt_id"] == donation["receipt_id"]
+    assert status["txn_id"] == donation["txn_id"]
 
 
 def test_callback_marks_donation_failed_on_cancellation(client, monkeypatch):
@@ -135,6 +149,42 @@ def test_callback_marks_donation_failed_on_cancellation(client, monkeypatch):
 
     status = client.get(f"/api/donations/{donation['id']}/status").get_json()
     assert status["status"] == "Failed"
+    assert status["failure_reason"] == "The payment request was cancelled."
+    assert "receipt_id" not in status
+    assert "txn_id" not in status
+
+
+def test_callback_failure_reason_for_insufficient_funds(client, monkeypatch):
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_insufficient_funds")
+    donation = client.post("/api/donations", json=VALID_MPESA_DONATION).get_json()["donation"]
+
+    client.post("/api/mpesa/callback", json={
+        "Body": {"stkCallback": {"CheckoutRequestID": "ws_CO_insufficient_funds", "ResultCode": 1, "ResultDesc": "The balance is insufficient for the transaction."}}
+    })
+    status = client.get(f"/api/donations/{donation['id']}/status").get_json()
+    assert status["failure_reason"] == "There were insufficient funds to complete this payment."
+
+
+def test_callback_failure_reason_for_timeout(client, monkeypatch):
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_timeout_case")
+    donation = client.post("/api/donations", json=VALID_MPESA_DONATION).get_json()["donation"]
+
+    client.post("/api/mpesa/callback", json={
+        "Body": {"stkCallback": {"CheckoutRequestID": "ws_CO_timeout_case", "ResultCode": 1037, "ResultDesc": "DS timeout user cannot be reached"}}
+    })
+    status = client.get(f"/api/donations/{donation['id']}/status").get_json()
+    assert status["failure_reason"] == "No response was received in time. Please try again."
+
+
+def test_callback_failure_reason_falls_back_for_unknown_code(client, monkeypatch):
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_unknown_case")
+    donation = client.post("/api/donations", json=VALID_MPESA_DONATION).get_json()["donation"]
+
+    client.post("/api/mpesa/callback", json={
+        "Body": {"stkCallback": {"CheckoutRequestID": "ws_CO_unknown_case", "ResultCode": 424242, "ResultDesc": "Some obscure internal Safaricom code."}}
+    })
+    status = client.get(f"/api/donations/{donation['id']}/status").get_json()
+    assert status["failure_reason"] == "The payment could not be completed. Please try again."
 
 
 def test_callback_with_unknown_checkout_id_is_a_harmless_noop(client):

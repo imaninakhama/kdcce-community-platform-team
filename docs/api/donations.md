@@ -26,7 +26,7 @@ Donation object:
   "campaign": null, "payment_method": "M-Pesa",
   "item_description": null, "quantity": null, "unit": null,
   "status": "Paid", "txn_id": "TXN-A1B2C3D4E5F6", "receipt_id": "KDCCE-2026-000001",
-  "mpesa_receipt_number": "NLJ7RT61SV",
+  "mpesa_receipt_number": "NLJ7RT61SV", "mpesa_failure_reason": null,
   "message": null, "created_at": "...", "updated_at": "..."
 }
 ```
@@ -34,6 +34,8 @@ Donation object:
 M-Pesa payment is actually confirmed (or for any non-M-Pesa donation).
 Kept separate from `txn_id`/`receipt_id`, which stay this app's own
 server-generated identifiers regardless of payment method.
+`mpesa_failure_reason` is set only when `status` is `Failed` from an
+M-Pesa callback — a donor-readable explanation, `null` otherwise.
 
 A Food/Equipment row looks the same shape with `amount`/`payment_method`
 null (unless an estimated value was given) and `item_description`/
@@ -81,9 +83,16 @@ donation.
 Public, deliberately narrow — built for the donation form to poll while
 waiting on an M-Pesa push, without exposing the full admin-only donation
 record (`GET /api/donations/{id}` below) to an unauthenticated caller.
+**Receipt-identifying fields are only ever present once `status` is
+`Paid`** — an STK push having been sent is not a successful payment, so
+a `Pending` or `Failed` response gives the frontend nothing it could use
+to render a receipt, even by mistake.
 
 - **Auth:** none.
-- **Response `200`:** `{ "status": "...", "receipt_id": "...", "txn_id": "...", "mpesa_receipt_number": "..." }`
+- **Response `200`**, shape depends on `status`:
+  - `Pending`: `{ "status": "Pending" }`
+  - `Paid`: `{ "status": "Paid", "receipt_id": "...", "txn_id": "...", "mpesa_receipt_number": "..." }`
+  - `Failed`: `{ "status": "Failed", "failure_reason": "..." }` — a donor-readable explanation (e.g. "The payment request was cancelled.", "There were insufficient funds to complete this payment.") mapped from Safaricom's result code; falls back to a generic message for an unrecognized code.
 - **Errors:** `404`.
 
 ## POST /api/mpesa/callback
