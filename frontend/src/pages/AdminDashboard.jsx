@@ -25,10 +25,6 @@ import IncidentManager from './admin/IncidentManager'
 import ReportsManager from './admin/ReportsManager'
 import AnalyticsManager from './admin/AnalyticsManager'
 import InboxManager from './admin/InboxManager'
-import UsersManager from './admin/UsersManager'
-import SessionsManager from './admin/SessionsManager'
-import AuditLogViewer from './admin/AuditLogViewer'
-import SecurityDashboard from './admin/SecurityDashboard'
 
 function QuickActionMenu() {
   const [open, setOpen] = useState(false)
@@ -280,10 +276,6 @@ function AdminDashboardRoutes() {
         deleteCraft={id => craftsApi.remove(id, '/api/admin/crafts')}
         showToast={showToast} />} />
       <Route path="inbox" element={<InboxManager showToast={showToast} />} />
-      <Route path="users" element={<UsersManager showToast={showToast} />} />
-      <Route path="sessions" element={<SessionsManager showToast={showToast} />} />
-      <Route path="audit-logs" element={<AuditLogViewer showToast={showToast} />} />
-      <Route path="security" element={<SecurityDashboard showToast={showToast} />} />
       <Route path="settings" element={<SettingsPage showToast={showToast} />} />
     </Routes>
     <Toast message={toast} />

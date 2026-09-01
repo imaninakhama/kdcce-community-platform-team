@@ -1,5 +1,5 @@
 import { NavLink, Link, useNavigate } from 'react-router-dom'
-import { Activity, BookOpen, Boxes, CalendarDays, ClipboardCheck, FileBarChart, FileImage, Gauge, HandHeart, Heart, HeartPulse, HeartHandshake, History, Home, Inbox, Laptop, LayoutDashboard, ListChecks, LogOut, Package, Pill, ShieldAlert, ShieldCheck, UserCog, UserRound, Users, Utensils } from 'lucide-react'
+import { Activity, BookOpen, Boxes, CalendarDays, ClipboardCheck, FileBarChart, FileImage, Gauge, HandHeart, Heart, HeartPulse, HeartHandshake, Home, Inbox, LayoutDashboard, ListChecks, LogOut, Package, Pill, ShieldAlert, UserRound, Users, Utensils } from 'lucide-react'
 import ThemeToggle from '../../theme/ThemeToggle'
 import NotificationBell from './NotificationBell'
 import GlobalSearch from './GlobalSearch'
@@ -35,22 +35,13 @@ const staffMenu = [
   ['Team', '/admin/team', 'Users'],
   ['Craft Shop', '/admin/crafts', 'Package'],
   ['Inbox', '/admin/inbox', 'Inbox'],
-  ['Sessions', '/admin/sessions', 'Laptop'],
 ]
-// Admin-only surfaces — the backend rejects these with 403 for staff, so
-// they're only ever added to the nav for an admin, rather than shown and
-// left to fail on click.
-const adminMenu = [
-  ['Users', '/admin/users', 'UserCog'],
-  ['Audit Logs', '/admin/audit-logs', 'History'],
-  ['Security', '/admin/security', 'ShieldCheck'],
-]
-const icons = { LayoutDashboard, Heart, HeartPulse, HeartHandshake, History, Home, Pill, BookOpen, FileImage, Users, Laptop, Package, Inbox, ShieldCheck, UserCog, UserRound, ClipboardCheck, Utensils, Boxes, Activity, HandHeart, ShieldAlert, FileBarChart, Gauge, ListChecks, CalendarDays }
+const icons = { LayoutDashboard, Heart, HeartPulse, HeartHandshake, Home, Pill, BookOpen, FileImage, Users, Package, Inbox, UserRound, ClipboardCheck, Utensils, Boxes, Activity, HandHeart, ShieldAlert, FileBarChart, Gauge, ListChecks, CalendarDays }
 
 export default function Shell({ children }) {
   const navigate = useNavigate()
   const user = getStoredUser()
-  const menu = user?.role === 'admin' ? [...staffMenu, ...adminMenu] : staffMenu
+  const menu = staffMenu
   async function signOut() { await endSession(); navigate('/admin/login') }
   // No min-h, and items-start instead of grid's default align-items:
   // stretch — the sidebar's dark box must end at its own content (nav
