@@ -1,12 +1,16 @@
 import pytest
 
+# Card (Stripe), not M-Pesa: these tests exercise the generic public-donation
+# flow (create/list/CSV/PATCH), not payment processing — M-Pesa is a real
+# gateway (see test_mpesa.py) and would need a phone number plus a
+# configured/mocked Daraja sandbox to actually succeed here.
 VALID_DONATION = {
     "donor_name": "Amina K.",
     "donor_email": "amina@example.com",
     "amount": 2500,
     "frequency": "one-time",
     "campaign": "Feeding program",
-    "payment_method": "M-Pesa",
+    "payment_method": "Card (Stripe)",
 }
 
 
