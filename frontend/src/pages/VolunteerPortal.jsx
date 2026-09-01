@@ -85,7 +85,7 @@ export default function VolunteerPortal() {
       <Route path="assistance" element={<MyAssistanceRequests showToast={showToast} />} />
       <Route path="elderly-members" element={<MyElderlyMembers />} />
       <Route path="activity" element={<MyActivity />} />
-      <Route path="performance" element={<MyPerformance />} />
+      <Route path="performance" element={<MyPerformance showToast={showToast} />} />
       <Route path="messages" element={<VolunteerMessages />} />
       <Route path="report-concern" element={<ReportConcern showToast={showToast} />} />
       <Route path="notifications" element={<VolunteerNotifications />} />
