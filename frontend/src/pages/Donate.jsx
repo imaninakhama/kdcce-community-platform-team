@@ -1,6 +1,6 @@
 import { useSearchParams } from 'react-router-dom'
 import { useEffect, useState, useRef } from 'react'
-import { Check, Heart, ShieldCheck, Printer, Download, BadgeCheck, Smartphone, Phone, Mail, MapPin, AlertCircle, Loader2 } from 'lucide-react'
+import { Check, Heart, ShieldCheck, Printer, Download, BadgeCheck, Smartphone, Phone, Mail, MapPin, AlertCircle, Loader2, XCircle } from 'lucide-react'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import PageHero from '../components/PageHero'
@@ -64,6 +64,11 @@ export default function Donate() {
   // up waiting for a resolution.
   const [mpesaPending, setMpesaPending] = useState(null)
   const [mpesaTimedOut, setMpesaTimedOut] = useState(false)
+  // Set only once Safaricom's callback comes back with a non-success
+  // result — a dedicated state (not just the generic form `error`) so a
+  // failed payment gets its own clear screen, distinct from a validation
+  // error on the form itself.
+  const [mpesaFailed, setMpesaFailed] = useState(null)
   const receiptRef = useRef(null)
   const pollTimerRef = useRef(null)
   const presets = ['500', '1000', '2500', '5000']
@@ -80,13 +85,15 @@ export default function Donate() {
         pollMpesaStatus(donation, attempt + 1)
         return
       }
-      if (status.status === 'Paid' || status.status === 'Failed') {
+      if (status.status === 'Paid') {
+        // Receipt only ever gets built here, from a status response the
+        // backend only includes receipt fields in once it's actually
+        // Paid — never from the original STK-push-sent response.
         setMpesaPending(null)
-        if (status.status === 'Paid') {
-          setReceipt(buildReceipt({ ...donation, ...status }))
-        } else {
-          setError('The M-Pesa payment was not completed (cancelled or declined). Please try again.')
-        }
+        setReceipt(buildReceipt({ ...donation, ...status }))
+      } else if (status.status === 'Failed') {
+        setMpesaPending(null)
+        setMpesaFailed(status.failure_reason || 'The payment could not be completed. Please try again.')
       } else if (attempt >= MPESA_POLL_MAX_ATTEMPTS) {
         setMpesaTimedOut(true)
       } else {
@@ -105,6 +112,7 @@ export default function Donate() {
     e.preventDefault()
     setError('')
     setMpesaTimedOut(false)
+    setMpesaFailed(null)
     setSubmitting(true)
     const f = new FormData(e.target)
     try {
@@ -123,12 +131,12 @@ export default function Donate() {
           message: f.get('message')
         }
       })
-      if (donation.payment_method === 'M-Pesa' && donation.status === 'Pending') {
-        setMpesaPending(donation)
-        pollMpesaStatus(donation)
-      } else {
-        setReceipt(buildReceipt(donation))
-      }
+      // An STK push having been sent is not a successful payment — this
+      // response is always Pending (the backend never returns Paid here),
+      // so the receipt is never built from it. Only pollMpesaStatus above,
+      // reacting to a confirmed Paid status, ever calls setReceipt.
+      setMpesaPending(donation)
+      pollMpesaStatus(donation)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')
     } finally {
@@ -142,8 +150,13 @@ export default function Donate() {
     setMpesaTimedOut(false)
   }
 
+  function tryAgain() {
+    setMpesaFailed(null)
+    setError('')
+  }
+
   return <>
-    <div className="print:hidden"><PageHero title="Make a difference today" eyebrow="Support / Donate" text="This is the UI for the course project's sandbox donation flow. No real payments are processed here yet." image="/images/mary.jpg" /></div>
+    <div className="print:hidden"><PageHero title="Make a difference today" eyebrow="Support / Donate" text="Your contribution helps fund meals, healthcare support, activities and dignity for older persons at our centre." image="/images/mary.jpg" /></div>
     <section className="container-k grid gap-10 py-20 lg:grid-cols-[1fr_420px] print:block print:py-6">
       {receipt ? <div>
         <div className="text-center print:hidden"><div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-kOrange text-white"><Check /></div><h2 className="mt-6 font-display text-3xl font-bold text-kGreen">Thank you for your support.</h2><p className="mx-auto mt-3 max-w-md leading-7 text-kMuted">A donation receipt has been generated below. In the live version this will also be emailed to you automatically.</p></div>
@@ -193,6 +206,11 @@ export default function Donate() {
 
         <div className="mx-auto mt-6 flex max-w-xl flex-col gap-3 sm:flex-row print:hidden"><button onClick={() => window.print()} className="btn-green flex-1"><Printer size={16} /> Print receipt</button><button onClick={handleDownload} disabled={generatingPdf} className="btn-orange flex-1 disabled:opacity-60"><Download size={16} /> {generatingPdf ? 'Preparing PDF…' : 'Download receipt (PDF)'}</button></div>
         <p className="mt-5 text-center print:hidden"><button onClick={() => setReceipt(null)} className="text-sm font-bold text-kOrange">Make another donation</button></p>
+      </div> : mpesaFailed ? <div className="card-k p-7 text-center md:p-9">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-kTint text-kOrange"><XCircle size={26} /></div>
+        <h2 className="mt-6 font-display text-2xl font-bold text-kGreen">Payment not completed</h2>
+        <p className="mx-auto mt-3 max-w-sm leading-7 text-kMuted">{mpesaFailed}</p>
+        <div className="mt-7"><button onClick={tryAgain} className="btn-orange">Try again</button></div>
       </div> : mpesaPending ? <div className="card-k p-7 text-center md:p-9">
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-kTint text-kOrange">
           {mpesaTimedOut ? <Smartphone size={26} /> : <Loader2 size={26} className="animate-spin" />}
@@ -201,7 +219,7 @@ export default function Donate() {
         <p className="mx-auto mt-3 max-w-sm leading-7 text-kMuted">
           {mpesaTimedOut
             ? "This is taking longer than usual. If you've completed the prompt on your phone, keep waiting — otherwise you can start over."
-            : <>We've sent an M-Pesa prompt to <span className="font-semibold text-kInk">{mpesaPending.donor_phone}</span>. Enter your PIN on your phone to complete the KES {Number(mpesaPending.amount).toLocaleString()} donation.</>}
+            : <>We've sent an M-Pesa prompt to <span className="font-semibold text-kInk">{mpesaPending.donor_phone}</span>. Enter your PIN on your phone to confirm the KES {Number(mpesaPending.amount).toLocaleString()} donation — we're still waiting for that confirmation.</>}
         </p>
         <div className="mt-7 flex flex-col items-center gap-3">
           {mpesaTimedOut && <button onClick={() => { setMpesaTimedOut(false); pollMpesaStatus(mpesaPending) }} className="btn-orange">Keep waiting</button>}
@@ -224,7 +242,7 @@ export default function Donate() {
         </div>
         <label className="mt-4 block text-sm font-semibold">Message or dedication (optional)<textarea name="message" className="input-k mt-2 min-h-28" placeholder="e.g. In memory of..." /></label>
         {error && <div className="mt-5 flex items-start gap-2 rounded-xl bg-kTint p-3 text-sm text-kOrange"><AlertCircle size={16} className="mt-0.5 shrink-0" /> {error}</div>}
-        <button disabled={submitting} className="btn-orange mt-6 w-full disabled:opacity-60"><Heart size={17} /> {submitting ? 'Sending M-Pesa prompt…' : 'Donate with M-Pesa'}</button>
+        <button disabled={submitting} className="btn-orange mt-6 w-full disabled:opacity-60"><Heart size={17} /> {submitting ? 'Sending M-Pesa prompt…' : 'Donate'}</button>
         <p className="mt-3 text-center text-xs text-kMuted">You can safely try this payment option. You may receive a prompt on your phone, but no money will be charged.</p>
       </form>}
       <aside className="self-start rounded-2xl bg-kGreen p-7 text-white lg:sticky lg:top-28 print:hidden">
@@ -232,7 +250,7 @@ export default function Donate() {
         <h3 className="mt-2 font-display text-3xl font-bold">KES {Number(amount || 0).toLocaleString()} {frequency === 'monthly' ? '/ month' : ''}</h3>
         <p className="mt-4 leading-7 text-white/70">A simple contribution can help fund meals, community activities, wellness support or a home visit.</p>
         <div className="mt-7 grid gap-4 text-sm text-white/80">
-          <div className="flex gap-3"><Check size={18} className="text-orange-300" /> Secure sandbox checkout</div>
+          <div className="flex gap-3"><Check size={18} className="text-orange-300" /> Secure checkout</div>
           <div className="flex gap-3"><Check size={18} className="text-orange-300" /> Confirmation after payment</div>
           <div className="flex gap-3"><Check size={18} className="text-orange-300" /> Detailed donation receipt</div>
         </div>
