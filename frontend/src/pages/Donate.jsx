@@ -1,16 +1,10 @@
 import { useSearchParams } from 'react-router-dom'
-import { useState, useRef } from 'react'
-import { Check, Heart, ShieldCheck, Printer, Download, BadgeCheck, Smartphone, CreditCard, Wallet, Phone, Mail, MapPin, AlertCircle } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { Check, Heart, ShieldCheck, Printer, Download, BadgeCheck, Smartphone, Phone, Mail, MapPin, AlertCircle, Loader2 } from 'lucide-react'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import PageHero from '../components/PageHero'
 import { apiFetch, ApiError } from '../lib/api'
-
-const paymentMethods = [
-  { value: 'M-Pesa', icon: Smartphone },
-  { value: 'Card (Stripe)', icon: CreditCard },
-  { value: 'PayPal', icon: Wallet }
-]
 
 async function downloadReceiptPdf(node, receiptId) {
   // Receipts print on paper — always render them in light colors for the
@@ -29,17 +23,77 @@ async function downloadReceiptPdf(node, receiptId) {
   }
 }
 
+// M-Pesa polling: STK push confirmation is async (Safaricom calls our
+// backend, not the browser), so the only way the browser finds out is by
+// polling the donation's status. 3s is frequent enough to feel responsive
+// without hammering the endpoint; 40 attempts (~2 minutes) covers a real
+// donor entering their PIN, well past sandbox's usual few-second turnaround.
+const MPESA_POLL_INTERVAL_MS = 3000
+const MPESA_POLL_MAX_ATTEMPTS = 40
+
+function buildReceipt(donation) {
+  return {
+    id: donation.receipt_id,
+    txnId: donation.txn_id,
+    mpesaReceiptNumber: donation.mpesa_receipt_number,
+    status: donation.status,
+    date: new Date(donation.created_at).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }),
+    name: donation.donor_name,
+    email: donation.donor_email,
+    phone: donation.donor_phone,
+    campaign: donation.campaign,
+    amount: donation.amount,
+    currency: donation.currency,
+    frequency: donation.frequency,
+    paymentMethod: donation.payment_method,
+    message: donation.message
+  }
+}
+
 export default function Donate() {
   const [params] = useSearchParams()
   const [amount, setAmount] = useState(params.get('amount') || '1000')
   const [frequency, setFrequency] = useState(params.get('frequency') || 'one-time')
-  const [paymentMethod, setPaymentMethod] = useState('M-Pesa')
   const [receipt, setReceipt] = useState(null)
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  // Set only while an M-Pesa STK push has been sent and we're polling for
+  // Safaricom's callback to land: holds the just-created donation (so the
+  // receipt can still be built once confirmed) plus whether polling gave
+  // up waiting for a resolution.
+  const [mpesaPending, setMpesaPending] = useState(null)
+  const [mpesaTimedOut, setMpesaTimedOut] = useState(false)
   const receiptRef = useRef(null)
+  const pollTimerRef = useRef(null)
   const presets = ['500', '1000', '2500', '5000']
+
+  useEffect(() => () => window.clearTimeout(pollTimerRef.current), [])
+
+  function pollMpesaStatus(donation, attempt = 1) {
+    pollTimerRef.current = window.setTimeout(async () => {
+      let status
+      try {
+        status = await apiFetch(`/api/donations/${donation.id}/status`, { auth: false })
+      } catch {
+        // A transient network hiccup shouldn't end the wait — just retry.
+        pollMpesaStatus(donation, attempt + 1)
+        return
+      }
+      if (status.status === 'Paid' || status.status === 'Failed') {
+        setMpesaPending(null)
+        if (status.status === 'Paid') {
+          setReceipt(buildReceipt({ ...donation, ...status }))
+        } else {
+          setError('The M-Pesa payment was not completed (cancelled or declined). Please try again.')
+        }
+      } else if (attempt >= MPESA_POLL_MAX_ATTEMPTS) {
+        setMpesaTimedOut(true)
+      } else {
+        pollMpesaStatus(donation, attempt + 1)
+      }
+    }, MPESA_POLL_INTERVAL_MS)
+  }
 
   async function handleDownload() {
     setGeneratingPdf(true)
@@ -50,6 +104,7 @@ export default function Donate() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+    setMpesaTimedOut(false)
     setSubmitting(true)
     const f = new FormData(e.target)
     try {
@@ -64,25 +119,16 @@ export default function Donate() {
           currency: 'KES',
           frequency,
           campaign: f.get('campaign'),
-          payment_method: paymentMethod,
+          payment_method: 'M-Pesa',
           message: f.get('message')
         }
       })
-      setReceipt({
-        id: donation.receipt_id,
-        txnId: donation.txn_id,
-        status: donation.status,
-        date: new Date(donation.created_at).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }),
-        name: donation.donor_name,
-        email: donation.donor_email,
-        phone: donation.donor_phone,
-        campaign: donation.campaign,
-        amount: donation.amount,
-        currency: donation.currency,
-        frequency: donation.frequency,
-        paymentMethod: donation.payment_method,
-        message: donation.message
-      })
+      if (donation.payment_method === 'M-Pesa' && donation.status === 'Pending') {
+        setMpesaPending(donation)
+        pollMpesaStatus(donation)
+      } else {
+        setReceipt(buildReceipt(donation))
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')
     } finally {
@@ -90,7 +136,11 @@ export default function Donate() {
     }
   }
 
-  const PaymentIcon = paymentMethods.find(m => m.value === (receipt?.paymentMethod))?.icon || Smartphone
+  function cancelMpesaWait() {
+    window.clearTimeout(pollTimerRef.current)
+    setMpesaPending(null)
+    setMpesaTimedOut(false)
+  }
 
   return <>
     <div className="print:hidden"><PageHero title="Make a difference today" eyebrow="Support / Donate" text="This is the UI for the course project's sandbox donation flow. No real payments are processed here yet." image="/images/mary.jpg" /></div>
@@ -111,6 +161,7 @@ export default function Donate() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-dashed border-kBorder px-6 py-4 text-sm">
             <div><span className="text-kMuted">Receipt No.</span> <span className="font-mono font-bold text-kGreen">{receipt.id}</span></div>
             <div><span className="text-kMuted">Transaction ID</span> <span className="font-mono font-bold text-kGreen">{receipt.txnId}</span></div>
+            {receipt.mpesaReceiptNumber && <div><span className="text-kMuted">M-Pesa Receipt No.</span> <span className="font-mono font-bold text-kGreen">{receipt.mpesaReceiptNumber}</span></div>}
           </div>
 
           <div className="grid gap-x-8 gap-y-4 p-6 text-sm sm:grid-cols-2">
@@ -120,7 +171,7 @@ export default function Donate() {
             <div><div className="text-xs font-semibold uppercase tracking-wide text-kMuted">Phone</div><div className="mt-1 font-semibold text-kInk">{receipt.phone || '—'}</div></div>
             <div><div className="text-xs font-semibold uppercase tracking-wide text-kMuted">Campaign / Fund</div><div className="mt-1 font-semibold text-kInk">{receipt.campaign}</div></div>
             <div><div className="text-xs font-semibold uppercase tracking-wide text-kMuted">Frequency</div><div className="mt-1 font-semibold text-kInk">{receipt.frequency === 'monthly' ? 'Monthly (recurring)' : 'One-time'}</div></div>
-            <div><div className="text-xs font-semibold uppercase tracking-wide text-kMuted">Payment Method</div><div className="mt-1 flex items-center gap-2 font-semibold text-kInk"><PaymentIcon size={16} className="text-kOrange" /> {receipt.paymentMethod}</div></div>
+            <div><div className="text-xs font-semibold uppercase tracking-wide text-kMuted">Payment Method</div><div className="mt-1 flex items-center gap-2 font-semibold text-kInk"><Smartphone size={16} className="text-kOrange" /> {receipt.paymentMethod}</div></div>
             <div><div className="text-xs font-semibold uppercase tracking-wide text-kMuted">Currency</div><div className="mt-1 font-semibold text-kInk">{receipt.currency}</div></div>
           </div>
 
@@ -142,6 +193,20 @@ export default function Donate() {
 
         <div className="mx-auto mt-6 flex max-w-xl flex-col gap-3 sm:flex-row print:hidden"><button onClick={() => window.print()} className="btn-green flex-1"><Printer size={16} /> Print receipt</button><button onClick={handleDownload} disabled={generatingPdf} className="btn-orange flex-1 disabled:opacity-60"><Download size={16} /> {generatingPdf ? 'Preparing PDF…' : 'Download receipt (PDF)'}</button></div>
         <p className="mt-5 text-center print:hidden"><button onClick={() => setReceipt(null)} className="text-sm font-bold text-kOrange">Make another donation</button></p>
+      </div> : mpesaPending ? <div className="card-k p-7 text-center md:p-9">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-kTint text-kOrange">
+          {mpesaTimedOut ? <Smartphone size={26} /> : <Loader2 size={26} className="animate-spin" />}
+        </div>
+        <h2 className="mt-6 font-display text-2xl font-bold text-kGreen">{mpesaTimedOut ? 'Still waiting on that payment' : 'Check your phone'}</h2>
+        <p className="mx-auto mt-3 max-w-sm leading-7 text-kMuted">
+          {mpesaTimedOut
+            ? "This is taking longer than usual. If you've completed the prompt on your phone, keep waiting — otherwise you can start over."
+            : <>We've sent an M-Pesa prompt to <span className="font-semibold text-kInk">{mpesaPending.donor_phone}</span>. Enter your PIN on your phone to complete the KES {Number(mpesaPending.amount).toLocaleString()} donation.</>}
+        </p>
+        <div className="mt-7 flex flex-col items-center gap-3">
+          {mpesaTimedOut && <button onClick={() => { setMpesaTimedOut(false); pollMpesaStatus(mpesaPending) }} className="btn-orange">Keep waiting</button>}
+          <button onClick={cancelMpesaWait} className="text-sm font-bold text-kGreen">Cancel and start over</button>
+        </div>
       </div> : <form className="card-k p-7 md:p-9" onSubmit={handleSubmit}>
         <div className="flex items-center justify-between gap-4"><div><div className="eyebrow">Donation details</div><h2 className="mt-1 font-display text-3xl font-bold text-kGreen">Choose your support</h2></div><ShieldCheck className="text-kOrange" /></div>
         <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-4">{presets.map(x => <button key={x} type="button" onClick={() => setAmount(x)} className={`rounded-xl border p-3 font-bold ${amount === x ? 'border-kOrange bg-kTint text-kOrange' : 'border-kBorder text-kGreen'}`}>KES {Number(x).toLocaleString()}</button>)}</div>
@@ -150,17 +215,17 @@ export default function Donate() {
           <button type="button" onClick={() => setFrequency('one-time')} className={`rounded-xl border p-4 text-left ${frequency === 'one-time' ? 'border-kOrange bg-kTint' : 'border-kBorder'}`}><div className="font-bold text-kGreen">One-time</div><div className="mt-1 text-xs text-kMuted">A single contribution</div></button>
           <button type="button" onClick={() => setFrequency('monthly')} className={`rounded-xl border p-4 text-left ${frequency === 'monthly' ? 'border-kOrange bg-kTint' : 'border-kBorder'}`}><div className="font-bold text-kGreen">Monthly</div><div className="mt-1 text-xs text-kMuted">Recurring support</div></button>
         </div>
-        <div className="mt-5 grid grid-cols-3 gap-3">{paymentMethods.map(({ value, icon: Icon }) => <button key={value} type="button" onClick={() => setPaymentMethod(value)} className={`flex flex-col items-center gap-2 rounded-xl border p-3 text-xs font-bold ${paymentMethod === value ? 'border-kOrange bg-kTint text-kOrange' : 'border-kBorder text-kGreen'}`}><Icon size={18} /> {value}</button>)}</div>
+        <div className="mt-5 flex items-center gap-2 rounded-xl border border-kOrange bg-kTint p-3 text-xs font-bold text-kOrange"><Smartphone size={18} /> Paying with M-Pesa</div>
         <div className="mt-7 grid gap-4 md:grid-cols-2">
           <label className="text-sm font-semibold">Full name<input name="name" className="input-k mt-2" placeholder="Your name" required /></label>
           <label className="text-sm font-semibold">Email<input name="email" className="input-k mt-2" type="email" placeholder="you@example.com" required /></label>
-          <label className="text-sm font-semibold">Phone (optional)<input name="phone" className="input-k mt-2" placeholder="07xx xxx xxx" /></label>
+          <label className="text-sm font-semibold">M-Pesa phone number<input name="phone" className="input-k mt-2" placeholder="07xx xxx xxx" required /></label>
           <label className="text-sm font-semibold">Campaign<select name="campaign" className="input-k mt-2"><option>General support</option><option>Sponsor an Elder</option><option>Feeding program</option><option>Skills training</option></select></label>
         </div>
         <label className="mt-4 block text-sm font-semibold">Message or dedication (optional)<textarea name="message" className="input-k mt-2 min-h-28" placeholder="e.g. In memory of..." /></label>
         {error && <div className="mt-5 flex items-start gap-2 rounded-xl bg-kTint p-3 text-sm text-kOrange"><AlertCircle size={16} className="mt-0.5 shrink-0" /> {error}</div>}
-        <button disabled={submitting} className="btn-orange mt-6 w-full disabled:opacity-60"><Heart size={17} /> {submitting ? 'Processing…' : 'Continue to sandbox payment'}</button>
-        <p className="mt-3 text-center text-xs text-kMuted">Test mode only. Raw card numbers will never be stored by the app.</p>
+        <button disabled={submitting} className="btn-orange mt-6 w-full disabled:opacity-60"><Heart size={17} /> {submitting ? 'Sending M-Pesa prompt…' : 'Donate with M-Pesa'}</button>
+        <p className="mt-3 text-center text-xs text-kMuted">You can safely try this payment option. You may receive a prompt on your phone, but no money will be charged.</p>
       </form>}
       <aside className="self-start rounded-2xl bg-kGreen p-7 text-white lg:sticky lg:top-28 print:hidden">
         <div className="text-sm font-semibold italic text-kLime">Your impact</div>
