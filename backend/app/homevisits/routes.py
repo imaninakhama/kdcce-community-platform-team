@@ -215,6 +215,25 @@ def update_visit(visit_id):
     return jsonify(visit=visit.to_dict()), 200
 
 
+@bp.post("/<int:visit_id>/accept")
+@jwt_required()
+def accept_visit(visit_id):
+    """Acceptance is its own narrow action, not just another PATCH status
+    value — only the assigned volunteer can call it, only on their own
+    visit, only from Assigned. Mirrors assistance/routes.py's identical
+    accept_request()."""
+    visit = get_or_404(HomeVisit, visit_id)
+    identity = int(get_jwt_identity())
+    if visit.assigned_to_id != identity or not _is_verified_volunteer(identity):
+        return jsonify(error="Forbidden"), 403
+    if visit.status != "Assigned":
+        return jsonify(error=f"Cannot accept a visit in '{visit.status}' status — it must be 'Assigned' first"), 409
+
+    visit.status = "Accepted"
+    db.session.commit()
+    return jsonify(visit=visit.to_dict()), 200
+
+
 @bp.post("/<int:visit_id>/photo")
 @jwt_required()
 def upload_visit_photo(visit_id):

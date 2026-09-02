@@ -8,13 +8,12 @@ from ..extensions import db, limiter
 from ..models import Donation, utcnow
 from ..mpesa.service import MpesaError, initiate_stk_push, normalize_phone
 from ..utils import csv_response, get_or_404, validation_error_response
-from .schemas import AdminDonationCreateSchema, DonationCreateSchema, DonationUpdateSchema
+from .schemas import AdminDonationCreateSchema, DonationCreateSchema
 
 bp = Blueprint("donations", __name__)
 
 public_create_schema = DonationCreateSchema()
 admin_create_schema = AdminDonationCreateSchema()
-update_schema = DonationUpdateSchema()
 
 CSV_HEADER = [
     "Donor", "Email", "Amount", "Currency", "Frequency", "Campaign", "Payment Method",
@@ -35,33 +34,17 @@ def _generate_txn_id():
 @bp.post("/api/donations")
 @limiter.limit("10 per minute")
 def create_public_donation():
+    """The public form only ever submits payment_method: "M-Pesa" — the
+    schema enforces this (see PUBLIC_PAYMENT_METHODS in schemas.py) — so
+    every donation created here goes through the real Daraja STK push and
+    starts Pending, never optimistically Paid."""
     payload = request.get_json(silent=True) or {}
     try:
         data = public_create_schema.load(payload)
     except ValidationError as err:
         return validation_error_response(err)
 
-    if data.get("payment_method") == "M-Pesa":
-        return _create_mpesa_donation(data)
-
-    donation = Donation(
-        donation_type="Cash",
-        donor_name=data["donor_name"],
-        donor_email=data["donor_email"],
-        donor_phone=data.get("donor_phone"),
-        amount=data["amount"],
-        currency=data["currency"],
-        frequency=data["frequency"],
-        campaign=data.get("campaign"),
-        payment_method=data.get("payment_method"),
-        message=data.get("message"),
-        status="Paid",
-        txn_id=_generate_txn_id(),
-        receipt_id=_generate_receipt_id(),
-    )
-    db.session.add(donation)
-    db.session.commit()
-    return jsonify(donation=donation.to_dict()), 201
+    return _create_mpesa_donation(data)
 
 
 def _create_mpesa_donation(data):
@@ -194,21 +177,9 @@ def export_donations_csv():
 @bp.get("/api/donations/<int:donation_id>")
 @roles_required("admin", "staff")
 def get_donation(donation_id):
+    """Admins/staff can view a donation's payment details/status but
+    cannot edit them — there is deliberately no PATCH here. A donation's
+    status is only ever changed by the system itself (the M-Pesa callback
+    confirming Paid/Failed), never by a direct admin edit."""
     donation = get_or_404(Donation, donation_id)
-    return jsonify(donation=donation.to_dict()), 200
-
-
-@bp.patch("/api/donations/<int:donation_id>")
-@roles_required("admin", "staff")
-def update_donation(donation_id):
-    donation = get_or_404(Donation, donation_id)
-    payload = request.get_json(silent=True) or {}
-    try:
-        data = update_schema.load(payload, partial=True)
-    except ValidationError as err:
-        return validation_error_response(err)
-
-    for field, value in data.items():
-        setattr(donation, field, value)
-    db.session.commit()
     return jsonify(donation=donation.to_dict()), 200

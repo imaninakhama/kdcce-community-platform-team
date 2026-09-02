@@ -2,6 +2,12 @@ from marshmallow import Schema, fields, validate
 
 from ..models import HOME_VISIT_PRIORITIES, HOME_VISIT_STATUSES
 
+# What the assigned user may set their own visit's status to via PATCH.
+# "Accepted" is deliberately excluded — that's POST .../accept, a separate,
+# narrower action (see routes.py) — and "Pending"/"Assigned"/"Scheduled"
+# are staff-only states the assignee has no business setting.
+ASSIGNEE_SETTABLE_STATUSES = ("Started", "In Progress", "Completed", "Cancelled")
+
 
 class HomeVisitCreateSchema(Schema):
     elderly_member_id = fields.Integer(required=True)
@@ -32,7 +38,7 @@ class HomeVisitAssigneeUpdateSchema(Schema):
     """What the assigned staff member or verified volunteer may record on
     their own visit — the outcome, not the assignment itself."""
 
-    status = fields.String(allow_none=False, validate=validate.OneOf(HOME_VISIT_STATUSES))
+    status = fields.String(allow_none=False, validate=validate.OneOf(ASSIGNEE_SETTABLE_STATUSES))
     observations = fields.String(allow_none=True, validate=validate.Length(max=4000))
     support_provided = fields.String(allow_none=True, validate=validate.Length(max=2000))
     follow_up_required = fields.Boolean()

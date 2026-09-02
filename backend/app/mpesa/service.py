@@ -5,6 +5,7 @@ from datetime import datetime
 import requests
 from flask import current_app
 
+from ..email.service import send_email
 from ..extensions import db
 from ..models import Donation
 
@@ -161,3 +162,30 @@ def process_callback(payload):
         donation.mpesa_failure_reason = _friendly_failure_reason(stk.get("ResultCode"))
 
     db.session.commit()
+
+    if donation.status == "Paid":
+        # Best-effort: a confirmation email is never a reason to fail this
+        # callback — Daraja always gets its 200 regardless (see the note
+        # on process_callback above), and app/email/service.py already
+        # logs instead of sending when no provider is configured, so this
+        # never raises in practice either way.
+        try:
+            _send_donation_receipt_email(donation)
+        except Exception:
+            current_app.logger.exception("Failed to send donation confirmation email for donation %s", donation.id)
+
+
+def _send_donation_receipt_email(donation):
+    frequency = "monthly" if donation.frequency == "monthly" else "one-time"
+    campaign_line = f" to {donation.campaign}" if donation.campaign else ""
+    body = (
+        f"Hi {donation.donor_name},\n\n"
+        f"Thank you for your {frequency} donation of {donation.currency} {donation.amount:,.2f}{campaign_line}. "
+        "Your generosity helps KDCCE continue supporting older persons in Kibera.\n\n"
+        f"Receipt number: {donation.receipt_id}\n"
+        f"M-Pesa confirmation: {donation.mpesa_receipt_number or donation.txn_id}\n\n"
+        "This receipt is also available any time from the donation confirmation screen.\n\n"
+        "With gratitude,\n"
+        "The KDCCE Team"
+    )
+    send_email(donation.donor_email, "Thank you for your donation to KDCCE", body)

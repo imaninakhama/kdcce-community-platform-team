@@ -6,8 +6,8 @@ from marshmallow import ValidationError
 from ..auth.decorators import roles_required
 from ..extensions import db
 from ..models import (
-    OPA, AssignmentAttachment, AssistanceRequest, Attendance, ElderlyMember, HealthRecord, HomeVisit,
-    Incident, Meal, MealAttendance, Medication, MedicationAdministration,
+    OPA, ActivityParticipant, AssignmentAttachment, AssistanceRequest, Attendance, ElderlyMember, FollowUp,
+    HealthRecord, HomeVisit, Incident, Meal, MealAttendance, Medication, MedicationAdministration,
 )
 from ..utils import get_or_404, validation_error_response
 from .schemas import OPASchema, ElderlyMemberSchema
@@ -244,10 +244,49 @@ def update_member(member_id):
     return jsonify(member=member.to_dict()), 200
 
 
+# Every model with a care-history FK into elderly_members — checked before
+# a delete, not relied on for a cascade. Deleting an elder with real
+# history (a visit, a health note, an incident, ...) would silently
+# destroy that record; instead the admin is told exactly what's still
+# attached so they can decide (reassign it, or use PATCH status —
+# Inactive/Deceased/Transferred — to retire the member without losing
+# their history).
+_RELATED_RECORD_MODELS = [
+    (Attendance, "attendance record"),
+    (HealthRecord, "health record"),
+    (Medication, "medication"),
+    (HomeVisit, "home visit"),
+    (AssistanceRequest, "assistance request"),
+    (Incident, "incident report"),
+    (FollowUp, "follow-up"),
+    (ActivityParticipant, "activity registration"),
+    (MealAttendance, "meal attendance record"),
+]
+
+
+def _related_record_summary(member_id):
+    parts = []
+    for model, label in _RELATED_RECORD_MODELS:
+        count = model.query.filter_by(elderly_member_id=member_id).count()
+        if count:
+            parts.append(f"{count} {label}{'s' if count != 1 else ''}")
+    return parts
+
+
 @bp.delete("/api/elderly/<int:member_id>")
 @roles_required("admin")
 def delete_member(member_id):
     member = get_or_404(ElderlyMember, member_id)
+    related = _related_record_summary(member_id)
+    if related:
+        return jsonify(
+            error=(
+                f"Cannot delete {member.full_name} — this record has related history: "
+                f"{', '.join(related)}. Remove or reassign that history first, or mark the "
+                f"member Inactive/Deceased/Transferred instead of deleting."
+            )
+        ), 409
+
     db.session.delete(member)
     db.session.commit()
     return "", 204

@@ -1,36 +1,63 @@
 import pytest
 
-# Card (Stripe), not M-Pesa: these tests exercise the generic public-donation
-# flow (create/list/CSV/PATCH), not payment processing — M-Pesa is a real
-# gateway (see test_mpesa.py) and would need a phone number plus a
-# configured/mocked Daraja sandbox to actually succeed here.
+# The public donation flow only ever goes through the real M-Pesa Daraja
+# sandbox (see test_mpesa.py for the gateway-specific behavior) — these
+# tests exercise the generic donation record (create/list/CSV) using a
+# mocked STK push so they don't need real Daraja config.
 VALID_DONATION = {
     "donor_name": "Amina K.",
     "donor_email": "amina@example.com",
+    "donor_phone": "0712345678",
     "amount": 2500,
     "frequency": "one-time",
     "campaign": "Feeding program",
-    "payment_method": "Card (Stripe)",
+    "payment_method": "M-Pesa",
 }
 
 
-def test_public_can_create_donation(client):
+def _mock_stk(monkeypatch):
+    # mpesa_checkout_request_id is unique per donation — a fresh id per
+    # call so tests that create several donations in one test don't
+    # collide on that constraint.
+    counter = iter(range(1, 100000))
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: f"ws_CO_test_{next(counter)}")
+
+
+def test_public_can_create_donation(client, monkeypatch):
+    _mock_stk(monkeypatch)
     resp = client.post("/api/donations", json=VALID_DONATION)
     assert resp.status_code == 201
     donation = resp.get_json()["donation"]
     assert donation["donor_name"] == "Amina K."
-    assert donation["status"] == "Paid"
+    assert donation["status"] == "Pending"  # only the M-Pesa callback ever marks it Paid
     assert donation["receipt_id"].startswith("KDCCE-")
     assert donation["txn_id"].startswith("TXN-")
 
 
-def test_donation_status_from_client_is_ignored(client):
+def test_donation_status_from_client_is_ignored(client, monkeypatch):
     # A donor-facing client claiming its own payment already succeeded (or
     # anything else) must not be trusted — server always sets status.
-    resp = client.post("/api/donations", json={**VALID_DONATION, "status": "some-other-value"})
+    _mock_stk(monkeypatch)
+    resp = client.post("/api/donations", json={**VALID_DONATION, "status": "Paid"})
     assert resp.status_code in (201, 400)  # 400 if marshmallow rejects the unknown field outright
     if resp.status_code == 201:
-        assert resp.get_json()["donation"]["status"] == "Paid"
+        assert resp.get_json()["donation"]["status"] == "Pending"
+
+
+def test_rejects_non_mpesa_payment_method(client):
+    # Card (Stripe)/PayPal aren't wired to a real gateway on the public
+    # form — only AdminDonationCreateSchema (staff logging an
+    # already-completed offline donation) accepts those.
+    resp = client.post("/api/donations", json={**VALID_DONATION, "payment_method": "Card (Stripe)"})
+    assert resp.status_code == 400
+    assert "payment_method" in resp.get_json()["details"]
+
+
+def test_rejects_missing_payment_method(client):
+    payload = {k: v for k, v in VALID_DONATION.items() if k != "payment_method"}
+    resp = client.post("/api/donations", json=payload)
+    assert resp.status_code == 400
+    assert "payment_method" in resp.get_json()["details"]
 
 
 @pytest.mark.parametrize("amount", [0, -50])
@@ -57,14 +84,16 @@ def test_rejects_invalid_email(client):
     assert resp.status_code == 400
 
 
-def test_two_donations_get_distinct_receipt_and_txn_ids(client):
+def test_two_donations_get_distinct_receipt_and_txn_ids(client, monkeypatch):
+    _mock_stk(monkeypatch)
     first = client.post("/api/donations", json=VALID_DONATION).get_json()["donation"]
     second = client.post("/api/donations", json=VALID_DONATION).get_json()["donation"]
     assert first["receipt_id"] != second["receipt_id"]
     assert first["txn_id"] != second["txn_id"]
 
 
-def test_admin_can_list_donations(client, make_staff_user, auth_header):
+def test_admin_can_list_donations(client, monkeypatch, make_staff_user, auth_header):
+    _mock_stk(monkeypatch)
     client.post("/api/donations", json=VALID_DONATION)
     _, token = make_staff_user("admin")
     resp = client.get("/api/donations", headers=auth_header(token))
@@ -72,14 +101,16 @@ def test_admin_can_list_donations(client, make_staff_user, auth_header):
     assert len(resp.get_json()["donations"]) == 1
 
 
-def test_staff_can_list_donations(client, make_staff_user, auth_header):
+def test_staff_can_list_donations(client, monkeypatch, make_staff_user, auth_header):
+    _mock_stk(monkeypatch)
     client.post("/api/donations", json=VALID_DONATION)
     _, token = make_staff_user("staff")
     resp = client.get("/api/donations", headers=auth_header(token))
     assert resp.status_code == 200
 
 
-def test_volunteer_cannot_list_donations(client, make_user, auth_header):
+def test_volunteer_cannot_list_donations(client, monkeypatch, make_user, auth_header):
+    _mock_stk(monkeypatch)
     client.post("/api/donations", json=VALID_DONATION)
     _, access_token, _ = make_user()
     resp = client.get("/api/donations", headers=auth_header(access_token))
@@ -91,23 +122,18 @@ def test_unauthenticated_cannot_list_donations(client):
     assert resp.status_code == 401
 
 
-def test_admin_can_update_donation_status(client, make_staff_user, auth_header):
+def test_donation_edit_endpoint_does_not_exist(client, monkeypatch, make_staff_user, auth_header):
+    """Admins/staff can view a donation's payment details/status but can
+    never edit them — there is no PATCH endpoint at all, not even for an
+    admin. Only the M-Pesa callback (see test_mpesa.py) ever changes a
+    donation's status, and that's a direct internal write, not this route."""
+    _mock_stk(monkeypatch)
     donation = client.post("/api/donations", json=VALID_DONATION).get_json()["donation"]
     _, token = make_staff_user("admin")
     resp = client.patch(
         f"/api/donations/{donation['id']}", json={"status": "Pending"}, headers=auth_header(token)
     )
-    assert resp.status_code == 200
-    assert resp.get_json()["donation"]["status"] == "Pending"
-
-
-def test_volunteer_cannot_update_donation(client, make_user, auth_header):
-    donation = client.post("/api/donations", json=VALID_DONATION).get_json()["donation"]
-    _, access_token, _ = make_user()
-    resp = client.patch(
-        f"/api/donations/{donation['id']}", json={"status": "Pending"}, headers=auth_header(access_token)
-    )
-    assert resp.status_code == 403
+    assert resp.status_code == 405
 
 
 def test_csv_export_requires_admin_or_staff(client, make_user, auth_header):
@@ -121,7 +147,8 @@ def test_csv_export_rejects_unauthenticated(client):
     assert resp.status_code == 401
 
 
-def test_csv_export_returns_csv_for_admin(client, make_staff_user, auth_header):
+def test_csv_export_returns_csv_for_admin(client, monkeypatch, make_staff_user, auth_header):
+    _mock_stk(monkeypatch)
     client.post("/api/donations", json=VALID_DONATION)
     _, token = make_staff_user("admin")
     resp = client.get("/api/donations/export.csv", headers=auth_header(token))
@@ -132,14 +159,16 @@ def test_csv_export_returns_csv_for_admin(client, make_staff_user, auth_header):
     assert "Donor,Email,Amount" in body
 
 
-def test_public_donation_defaults_to_cash_type(client):
+def test_public_donation_defaults_to_cash_type(client, monkeypatch):
+    _mock_stk(monkeypatch)
     donation = client.post("/api/donations", json=VALID_DONATION).get_json()["donation"]
     assert donation["donation_type"] == "Cash"
 
 
-def test_public_endpoint_ignores_client_supplied_donation_type(client):
+def test_public_endpoint_ignores_client_supplied_donation_type(client, monkeypatch):
     # DonationCreateSchema has no donation_type field — the public flow
     # can never create a Food/Equipment row.
+    _mock_stk(monkeypatch)
     resp = client.post("/api/donations", json={**VALID_DONATION, "donation_type": "Food"})
     assert resp.status_code in (201, 400)
     if resp.status_code == 201:
@@ -179,6 +208,17 @@ def test_staff_can_log_a_walk_in_cash_donation(client, make_staff_user, auth_hea
     assert body["status"] == "Paid"
     assert body["amount"] == 3000.0
     assert body["donor_email"] is None  # never required for the admin path
+
+
+def test_staff_can_log_a_cash_donation_reported_via_paypal(client, make_staff_user, auth_header):
+    # Unlike the public form, staff logging an already-completed offline
+    # donation may record any payment_method, including ones with no live
+    # gateway integration — they're documenting something that already
+    # happened, not approving an in-flight payment.
+    _, token = make_staff_user("admin")
+    resp = client.post("/api/admin/donations", json={**VALID_CASH_ADMIN, "payment_method": "PayPal"}, headers=auth_header(token))
+    assert resp.status_code == 201
+    assert resp.get_json()["donation"]["payment_method"] == "PayPal"
 
 
 def test_food_donation_rejects_missing_item_description(client, make_staff_user, auth_header):
@@ -231,7 +271,8 @@ def test_donation_type_receipt_and_txn_ids_are_generated_for_in_kind_too(client,
 
 # ---------- Listing/filtering by type ----------
 
-def test_list_filters_by_donation_type(client, make_staff_user, auth_header):
+def test_list_filters_by_donation_type(client, monkeypatch, make_staff_user, auth_header):
+    _mock_stk(monkeypatch)
     client.post("/api/donations", json=VALID_DONATION)  # Cash
     _, token = make_staff_user("admin")
     client.post("/api/admin/donations", json=VALID_FOOD, headers=auth_header(token))
@@ -242,20 +283,6 @@ def test_list_filters_by_donation_type(client, make_staff_user, auth_header):
 
     all_donations = client.get("/api/donations", headers=auth_header(token))
     assert len(all_donations.get_json()["donations"]) == 2
-
-
-# ---------- Partial-PATCH regression (extended fields) ----------
-
-def test_status_persists_across_partial_edit_of_in_kind_donation(client, make_staff_user, auth_header):
-    _, token = make_staff_user("admin")
-    donation = client.post("/api/admin/donations", json=VALID_FOOD, headers=auth_header(token)).get_json()["donation"]
-
-    patched = client.patch(f"/api/donations/{donation['id']}", json={"item_description": "60kg rice"}, headers=auth_header(token))
-    assert patched.status_code == 200
-    body = patched.get_json()["donation"]
-    assert body["status"] == "Received"  # unchanged, not reset
-    assert body["item_description"] == "60kg rice"
-    assert body["quantity"] == 50.0  # unchanged
 
 
 def test_csv_export_includes_in_kind_donations(client, make_staff_user, auth_header):

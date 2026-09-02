@@ -134,15 +134,55 @@ def test_elderly_update_status(client, make_staff_user, auth_header):
     assert resp.get_json()["member"]["status"] == "Inactive"
 
 
-def test_staff_cannot_delete_elderly_member(client, make_staff_user, auth_header):
-    _, token = make_staff_user("staff")
-    member = client.post("/api/elderly", json=VALID_MEMBER, headers=auth_header(token)).get_json()["member"]
-    resp = client.delete(f"/api/elderly/{member['id']}", headers=auth_header(token))
-    assert resp.status_code == 403
-
-
-def test_admin_can_delete_elderly_member(client, make_staff_user, auth_header):
+def test_admin_can_delete_elderly_member_with_no_history(client, make_staff_user, auth_header):
     _, token = make_staff_user("admin")
     member = client.post("/api/elderly", json=VALID_MEMBER, headers=auth_header(token)).get_json()["member"]
     resp = client.delete(f"/api/elderly/{member['id']}", headers=auth_header(token))
     assert resp.status_code == 204
+
+    listed = client.get("/api/elderly", headers=auth_header(token))
+    assert all(m["id"] != member["id"] for m in listed.get_json()["members"])
+
+
+def test_staff_cannot_delete_elderly_member(client, make_staff_user, auth_header):
+    """Only an admin can delete — staff can do everything else here
+    (register, edit, view) but not this."""
+    _, staff_token = make_staff_user("staff")
+    _, admin_token = make_staff_user("admin")
+    member = client.post("/api/elderly", json=VALID_MEMBER, headers=auth_header(admin_token)).get_json()["member"]
+    resp = client.delete(f"/api/elderly/{member['id']}", headers=auth_header(staff_token))
+    assert resp.status_code == 403
+
+
+def test_volunteer_cannot_delete_elderly_member(client, make_user, make_staff_user, auth_header):
+    _, admin_token = make_staff_user("admin")
+    _, access_token, _ = make_user()
+    member = client.post("/api/elderly", json=VALID_MEMBER, headers=auth_header(admin_token)).get_json()["member"]
+    resp = client.delete(f"/api/elderly/{member['id']}", headers=auth_header(access_token))
+    assert resp.status_code == 403
+
+
+def test_unauthenticated_cannot_delete_elderly_member(client, make_staff_user, auth_header):
+    _, token = make_staff_user("admin")
+    member = client.post("/api/elderly", json=VALID_MEMBER, headers=auth_header(token)).get_json()["member"]
+    resp = client.delete(f"/api/elderly/{member['id']}")
+    assert resp.status_code == 401
+
+
+def test_delete_rejects_member_with_related_history(client, make_staff_user, auth_header):
+    """Deleting a member with real care history (here: an attendance
+    check-in) is blocked with a clear error instead of silently cascading
+    — the record and its history both survive the attempt."""
+    _, token = make_staff_user("admin")
+    member = client.post("/api/elderly", json=VALID_MEMBER, headers=auth_header(token)).get_json()["member"]
+    checkin = client.post("/api/attendance/check-in", json={"elderly_member_id": member["id"]}, headers=auth_header(token))
+    assert checkin.status_code == 201
+
+    resp = client.delete(f"/api/elderly/{member['id']}", headers=auth_header(token))
+    assert resp.status_code == 409
+    assert member["full_name"] in resp.get_json()["error"]
+    assert "attendance record" in resp.get_json()["error"]
+
+    # Untouched — both the member and the attendance record survive.
+    still_there = client.get(f"/api/elderly/{member['id']}", headers=auth_header(token))
+    assert still_there.status_code == 200

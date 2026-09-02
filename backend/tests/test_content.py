@@ -1,64 +1,8 @@
-import pytest
+import io
 
-
-# ---------- Blog ----------
-
-def test_public_blog_only_returns_published(client, make_staff_user, auth_header):
-    _, token = make_staff_user("admin")
-    client.post("/api/admin/blog", json={"title": "Published post", "status": "Published"}, headers=auth_header(token))
-    client.post("/api/admin/blog", json={"title": "Draft post", "status": "Draft"}, headers=auth_header(token))
-
-    resp = client.get("/api/blog")
-    assert resp.status_code == 200
-    titles = [p["title"] for p in resp.get_json()["posts"]]
-    assert titles == ["Published post"]
-
-
-def test_admin_blog_list_includes_drafts(client, make_staff_user, auth_header):
-    _, token = make_staff_user("admin")
-    client.post("/api/admin/blog", json={"title": "Draft post", "status": "Draft"}, headers=auth_header(token))
-
-    resp = client.get("/api/admin/blog", headers=auth_header(token))
-    assert resp.status_code == 200
-    assert len(resp.get_json()["posts"]) == 1
-
-
-def test_volunteer_cannot_create_blog_post(client, make_user, auth_header):
-    _, access_token, _ = make_user()
-    resp = client.post("/api/admin/blog", json={"title": "Sneaky"}, headers=auth_header(access_token))
-    assert resp.status_code == 403
-
-
-def test_unauthenticated_cannot_see_admin_blog_list(client):
-    resp = client.get("/api/admin/blog")
-    assert resp.status_code == 401
-
-
-def test_blog_create_rejects_empty_title(client, make_staff_user, auth_header):
-    _, token = make_staff_user("admin")
-    resp = client.post("/api/admin/blog", json={"title": ""}, headers=auth_header(token))
-    assert resp.status_code == 400
-
-
-def test_blog_create_rejects_invalid_status(client, make_staff_user, auth_header):
-    _, token = make_staff_user("admin")
-    resp = client.post("/api/admin/blog", json={"title": "X", "status": "Archived"}, headers=auth_header(token))
-    assert resp.status_code == 400
-
-
-def test_blog_update_and_delete(client, make_staff_user, auth_header):
-    _, token = make_staff_user("admin")
-    post = client.post("/api/admin/blog", json={"title": "Original"}, headers=auth_header(token)).get_json()["post"]
-
-    patched = client.patch(
-        f"/api/admin/blog/{post['id']}", json={"title": "Updated", "status": "Published"}, headers=auth_header(token)
-    )
-    assert patched.status_code == 200
-    assert patched.get_json()["post"]["title"] == "Updated"
-
-    deleted = client.delete(f"/api/admin/blog/{post['id']}", headers=auth_header(token))
-    assert deleted.status_code == 204
-    assert client.get("/api/admin/blog", headers=auth_header(token)).get_json()["posts"] == []
+JPEG_BYTES = b"\xff\xd8\xff\xe0" + b"\x00" * 100
+NOT_AN_IMAGE = b"this is definitely not an image file" + b"\x00" * 100
+OVERSIZED_JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * (5 * 1024 * 1024 + 1)
 
 
 # ---------- Gallery ----------
@@ -90,44 +34,72 @@ def test_gallery_delete(client, make_staff_user, auth_header):
     assert resp.status_code == 204
 
 
-# ---------- Crafts ----------
+# ---------- Gallery: "Add Photo" file upload ----------
 
-VALID_CRAFT = {"title": "Beaded Bracelet", "category": "Beadwork", "maker": "Mary A.", "price": 850}
-
-
-def test_public_can_read_crafts(client, make_staff_user, auth_header):
+def test_gallery_upload_accepts_valid_jpeg_and_serves_it_back_publicly(client, make_staff_user, auth_header):
     _, token = make_staff_user("admin")
-    client.post("/api/admin/crafts", json=VALID_CRAFT, headers=auth_header(token))
-    resp = client.get("/api/crafts")
-    assert resp.status_code == 200
-    assert resp.get_json()["crafts"][0]["title"] == "Beaded Bracelet"
+    resp = client.post(
+        "/api/admin/gallery/upload",
+        data={"image": (io.BytesIO(JPEG_BYTES), "photo.jpg")},
+        content_type="multipart/form-data",
+        headers=auth_header(token),
+    )
+    assert resp.status_code == 201
+    image = resp.get_json()["image"]
+    assert image["url"].startswith("/api/gallery/uploads/")
+
+    # The uploaded photo needs to be visible on the unauthenticated public
+    # Gallery page — no auth header on this request.
+    served = client.get(image["url"])
+    assert served.status_code == 200
+    assert served.data == JPEG_BYTES
 
 
-def test_volunteer_cannot_create_craft(client, make_user, auth_header):
+def test_gallery_upload_rejects_non_image_file(client, make_staff_user, auth_header):
+    _, token = make_staff_user("admin")
+    resp = client.post(
+        "/api/admin/gallery/upload",
+        data={"image": (io.BytesIO(NOT_AN_IMAGE), "notes.txt")},
+        content_type="multipart/form-data",
+        headers=auth_header(token),
+    )
+    assert resp.status_code == 400
+    assert "image" in resp.get_json()["details"]
+
+
+def test_gallery_upload_rejects_oversized_file(client, make_staff_user, auth_header):
+    _, token = make_staff_user("admin")
+    resp = client.post(
+        "/api/admin/gallery/upload",
+        data={"image": (io.BytesIO(OVERSIZED_JPEG), "big.jpg")},
+        content_type="multipart/form-data",
+        headers=auth_header(token),
+    )
+    assert resp.status_code == 400
+
+
+def test_gallery_upload_requires_admin_or_staff(client, make_user, auth_header):
     _, access_token, _ = make_user()
-    resp = client.post("/api/admin/crafts", json=VALID_CRAFT, headers=auth_header(access_token))
+    resp = client.post(
+        "/api/admin/gallery/upload",
+        data={"image": (io.BytesIO(JPEG_BYTES), "photo.jpg")},
+        content_type="multipart/form-data",
+        headers=auth_header(access_token),
+    )
     assert resp.status_code == 403
 
 
-@pytest.mark.parametrize("price", [0, -10])
-def test_craft_rejects_non_positive_price(client, make_staff_user, auth_header, price):
+def test_gallery_delete_removes_uploaded_file_from_disk(client, make_staff_user, auth_header):
     _, token = make_staff_user("admin")
-    resp = client.post("/api/admin/crafts", json={**VALID_CRAFT, "price": price}, headers=auth_header(token))
-    assert resp.status_code == 400
+    image = client.post(
+        "/api/admin/gallery/upload",
+        data={"image": (io.BytesIO(JPEG_BYTES), "photo.jpg")},
+        content_type="multipart/form-data",
+        headers=auth_header(token),
+    ).get_json()["image"]
 
-
-def test_craft_rejects_invalid_category(client, make_staff_user, auth_header):
-    _, token = make_staff_user("admin")
-    resp = client.post("/api/admin/crafts", json={**VALID_CRAFT, "category": "Pottery"}, headers=auth_header(token))
-    assert resp.status_code == 400
-
-
-def test_craft_update_status(client, make_staff_user, auth_header):
-    _, token = make_staff_user("admin")
-    craft = client.post("/api/admin/crafts", json=VALID_CRAFT, headers=auth_header(token)).get_json()["craft"]
-    resp = client.patch(f"/api/admin/crafts/{craft['id']}", json={"status": "Sold"}, headers=auth_header(token))
-    assert resp.status_code == 200
-    assert resp.get_json()["craft"]["status"] == "Sold"
+    client.delete(f"/api/admin/gallery/{image['id']}", headers=auth_header(token))
+    assert client.get(image["url"]).status_code == 404
 
 
 # ---------- Team ----------

@@ -83,9 +83,7 @@ def _register_blueprints(app):
     from .assistance.routes import bp as assistance_bp
     from .attendance.routes import bp as attendance_bp
     from .auth.routes import bp as auth_bp
-    from .blog.routes import bp as blog_bp
     from .calendar.routes import bp as calendar_bp
-    from .crafts.routes import bp as crafts_bp
     from .donations.routes import bp as donations_bp
     from .elderly.routes import bp as elderly_bp
     from .feeding.routes import bp as feeding_bp
@@ -103,13 +101,14 @@ def _register_blueprints(app):
     from .reports.routes import bp as reports_bp
     from .search.routes import bp as search_bp
     from .team.routes import bp as team_bp
+    from .users.routes import bp as users_bp
     from .volunteers.routes import bp as volunteers_bp
 
     for bp in (
-        activities_bp, analytics_bp, assistance_bp, attendance_bp, auth_bp, blog_bp, calendar_bp,
-        crafts_bp, donations_bp, elderly_bp, feeding_bp, followups_bp, gallery_bp, health_bp,
+        activities_bp, analytics_bp, assistance_bp, attendance_bp, auth_bp, calendar_bp,
+        donations_bp, elderly_bp, feeding_bp, followups_bp, gallery_bp, health_bp,
         homevisits_bp, inbox_bp, inbox_admin_bp, incidents_bp, inventory_bp, medication_bp, mpesa_bp,
-        notifications_bp, reports_bp, search_bp, team_bp, volunteers_bp,
+        notifications_bp, reports_bp, search_bp, team_bp, users_bp, volunteers_bp,
     ):
         app.register_blueprint(bp)
 

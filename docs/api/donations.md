@@ -6,9 +6,13 @@ always server-generated, for every donation type.
 
 **M-Pesa is the one real payment gateway integrated** (Safaricom Daraja,
 sandbox by default — see `backend/app/mpesa/` and `backend/.env.example`
-for setup). Every other `payment_method`/`donation_type` combination still
-has no real gateway behind it: `status` there is just an internal workflow
-label, set immediately and never independently verified.
+for setup), and it's the only `payment_method` the *public* donation form
+(`POST /api/donations` below) accepts — anything else is rejected with a
+`400`, so a donation can never be marked `Paid` without a real gateway
+confirming it. Staff logging an already-completed offline donation via
+`POST /api/admin/donations` may still record any `payment_method`
+(including `Card (Stripe)`/`PayPal`) since that's documenting something
+that already happened outside the system, not approving a live payment.
 
 `donation_type` is `Cash | Food | Equipment`. Cash uses `amount` as the
 payment amount and defaults `status` to `Paid`; Food/Equipment use
@@ -52,31 +56,30 @@ donation.
   {
     "donor_name": "string, required, max 120",
     "donor_email": "email, required",
-    "donor_phone": "string, required for M-Pesa (a valid Safaricom number), optional otherwise, max 40",
+    "donor_phone": "string, required (a valid Safaricom number — the STK push destination)",
     "amount": "number > 0, required",
     "currency": "KES (only allowed value), optional, default KES",
     "frequency": "one-time | monthly, required",
     "campaign": "string, optional, max 120",
-    "payment_method": "M-Pesa | Card (Stripe) | PayPal, optional",
+    "payment_method": "\"M-Pesa\" (the only allowed value), required",
     "message": "string, optional, max 2000"
   }
   ```
   `status`, `donation_type`, `txn_id`, `receipt_id` are rejected/ignored if sent — always `Cash`/server-generated.
 
-  **`payment_method: "M-Pesa"` behaves differently from every other
-  method**: instead of an immediate `Paid` response, this triggers a real
-  Safaricom STK push to `donor_phone` and the donation is created with
-  `status: "Pending"`. The response still comes back `201` right away
-  (the push has been *sent*, not completed) — the frontend must poll
-  `GET /api/donations/{id}/status` (below) until `status` becomes `Paid`
-  or `Failed`. Every other `payment_method` is unchanged: an immediate
-  `201` with `status: "Paid"`.
+  Every donation created here triggers a real Safaricom STK push to
+  `donor_phone` and is created with `status: "Pending"`. The response
+  still comes back `201` right away (the push has been *sent*, not
+  completed) — the frontend must poll `GET /api/donations/{id}/status`
+  (below) until `status` becomes `Paid` or `Failed`. A confirmation email
+  is sent to `donor_email` once the callback confirms `Paid` (or logged to
+  the backend console in dev — see `backend/app/email/service.py`).
 - **Response `201`:** `{ "donation": { ... } }`
-- **Errors:** `400` validation (includes an invalid/missing phone for
-  M-Pesa); `502` if M-Pesa isn't configured on this server, or Safaricom's
-  API rejects/is unreachable for the push request itself — this is about
-  *sending* the push, not the donor's PIN entry, which resolves later via
-  the callback instead.
+- **Errors:** `400` validation (includes an invalid/missing phone, or any
+  `payment_method` other than `"M-Pesa"`); `502` if M-Pesa isn't
+  configured on this server, or Safaricom's API rejects/is unreachable for
+  the push request itself — this is about *sending* the push, not the
+  donor's PIN entry, which resolves later via the callback instead.
 
 ## GET /api/donations/{id}/status
 

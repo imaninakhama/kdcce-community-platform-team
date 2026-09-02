@@ -16,6 +16,27 @@ class Config:
 
     CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
+    # The frontend's own origin — used to build links this backend sends
+    # in emails (e.g. the volunteer-invitation link). Deliberately
+    # separate from CORS_ORIGINS (which can list several) since a link
+    # needs exactly one canonical destination.
+    FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+
+    # Outgoing email — see backend/.env.example. RESEND_API_KEY (preferred
+    # — https://resend.com) is tried first; SMTP_HOST is a fallback for
+    # any other provider. Leaving both unset is a safe, supported default
+    # for local dev: app/email/service.py logs the email instead of
+    # sending it rather than failing, so registration/approval never
+    # breaks over a missing mail provider.
+    RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+    SMTP_HOST = os.environ.get("SMTP_HOST")
+    SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+    SMTP_USERNAME = os.environ.get("SMTP_USERNAME")
+    SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
+    SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() != "false"
+    MAIL_FROM_NAME = os.environ.get("MAIL_FROM_NAME", "KDCCE")
+    MAIL_FROM_ADDRESS = os.environ.get("MAIL_FROM_ADDRESS", "no-reply@kdcce.org")
+
     # Hard backstop enforced before the request body is even parsed; the
     # real per-upload limit (5MB) is enforced at the application level in
     # app/assignments/service.py.

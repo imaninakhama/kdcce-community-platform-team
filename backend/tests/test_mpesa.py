@@ -131,6 +131,57 @@ def test_callback_marks_donation_paid_on_success(client, monkeypatch, app):
     assert status["txn_id"] == donation["txn_id"]
 
 
+def test_callback_sends_donation_confirmation_email_on_success(client, monkeypatch):
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_email_case")
+    sent = {}
+    monkeypatch.setattr("app.mpesa.service.send_email", lambda to_email, subject, body: sent.update(to=to_email, subject=subject, body=body) or True)
+    donation = client.post("/api/donations", json=VALID_MPESA_DONATION).get_json()["donation"]
+
+    callback_payload = {
+        "Body": {"stkCallback": {
+            "CheckoutRequestID": "ws_CO_email_case", "ResultCode": 0,
+            "CallbackMetadata": {"Item": [{"Name": "MpesaReceiptNumber", "Value": "QWE123RTY"}]},
+        }}
+    }
+    resp = client.post("/api/mpesa/callback", json=callback_payload)
+    assert resp.status_code == 200
+
+    assert sent["to"] == VALID_MPESA_DONATION["donor_email"]
+    assert "Thank you" in sent["subject"]
+    assert donation["receipt_id"] in sent["body"]
+    assert "QWE123RTY" in sent["body"]
+
+
+def test_callback_does_not_send_email_on_failed_payment(client, monkeypatch):
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_no_email_case")
+    calls = []
+    monkeypatch.setattr("app.mpesa.service.send_email", lambda *a, **kw: calls.append(1) or True)
+    client.post("/api/donations", json=VALID_MPESA_DONATION)
+
+    callback_payload = {"Body": {"stkCallback": {"CheckoutRequestID": "ws_CO_no_email_case", "ResultCode": 1032, "ResultDesc": "Request cancelled by user."}}}
+    client.post("/api/mpesa/callback", json=callback_payload)
+    assert calls == []
+
+
+def test_callback_email_failure_does_not_break_the_callback(client, monkeypatch):
+    """Daraja must always get its 200 acknowledgement, and the donation
+    must still end up Paid, even if sending the confirmation email
+    blows up (e.g. the mail provider is down)."""
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_broken_email")
+
+    def _raise(*a, **kw):
+        raise RuntimeError("mail provider is down")
+    monkeypatch.setattr("app.mpesa.service.send_email", _raise)
+    donation = client.post("/api/donations", json=VALID_MPESA_DONATION).get_json()["donation"]
+
+    callback_payload = {"Body": {"stkCallback": {"CheckoutRequestID": "ws_CO_broken_email", "ResultCode": 0, "CallbackMetadata": {"Item": []}}}}
+    resp = client.post("/api/mpesa/callback", json=callback_payload)
+    assert resp.status_code == 200
+
+    status = client.get(f"/api/donations/{donation['id']}/status").get_json()
+    assert status["status"] == "Paid"
+
+
 def test_callback_marks_donation_failed_on_cancellation(client, monkeypatch):
     monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_cancelled_case")
     donation = client.post("/api/donations", json=VALID_MPESA_DONATION).get_json()["donation"]
@@ -194,10 +245,16 @@ def test_callback_with_unknown_checkout_id_is_a_harmless_noop(client):
     assert resp.status_code == 200
 
 
-def test_non_mpesa_donation_still_paid_immediately(client):
+def test_non_mpesa_payment_method_is_rejected_on_public_form(client):
+    # The public donation form only has a real gateway for M-Pesa — a
+    # payment_method it can't actually process must never be silently
+    # accepted (that would let a donation be marked Paid without anyone
+    # ever charging the donor). Card (Stripe)/PayPal remain valid for
+    # staff logging an already-completed offline donation (see
+    # test_donations.py::test_staff_can_log_a_cash_donation_reported_via_paypal).
     resp = client.post("/api/donations", json={
         "donor_name": "Amina K.", "donor_email": "amina@example.com",
         "amount": 500, "frequency": "one-time", "payment_method": "Card (Stripe)",
     })
-    assert resp.status_code == 201
-    assert resp.get_json()["donation"]["status"] == "Paid"
+    assert resp.status_code == 400
+    assert "payment_method" in resp.get_json()["details"]

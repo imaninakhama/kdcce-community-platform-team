@@ -54,13 +54,14 @@ def test_trend_series_are_zero_filled_and_ordered(client, make_staff_user, auth_
     assert trend[-1]["date"] == datetime.date.today().isoformat()
 
 
-def test_donations_trend_series_does_not_crash(client, make_staff_user, auth_header):
+def test_donations_trend_series_does_not_crash(client, monkeypatch, make_staff_user, auth_header):
     """Regression: db.func.date() returns a plain string from SQLite, not
     a date object — a naive .isoformat() call on the grouped key crashes.
     This is the one trend series built from a func.date() expression
     rather than a native Date column."""
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_analytics_trend")
     _, token = make_staff_user("admin")
-    client.post("/api/donations", json={"donor_name": "Amina", "donor_email": "amina@example.com", "amount": 500, "frequency": "one-time"})
+    client.post("/api/donations", json={"donor_name": "Amina", "donor_email": "amina@example.com", "donor_phone": "0712345678", "amount": 500, "frequency": "one-time", "payment_method": "M-Pesa"})
 
     resp = client.get("/api/analytics/dashboard", headers=auth_header(token))
     assert resp.status_code == 200
@@ -119,12 +120,13 @@ def test_feeding_resources_low_stock_uses_database_comparison(client, make_staff
     assert resp.get_json()["dashboard"]["feeding_resources"]["low_stock_items"] == 1
 
 
-def test_feeding_resources_meals_and_donations(client, make_staff_user, auth_header):
+def test_feeding_resources_meals_and_donations(client, monkeypatch, make_staff_user, auth_header):
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_analytics_feeding")
     _, token = make_staff_user("admin")
     member = _register_member(client, token, auth_header)
     meal = client.post("/api/meals", json={"meal_type": "Lunch"}, headers=auth_header(token)).get_json()["meal"]
     client.post(f"/api/meals/{meal['id']}/attendance", json={"elderly_member_id": member["id"]}, headers=auth_header(token))
-    client.post("/api/donations", json={"donor_name": "Amina", "donor_email": "amina@example.com", "amount": 500, "frequency": "one-time"})
+    client.post("/api/donations", json={"donor_name": "Amina", "donor_email": "amina@example.com", "donor_phone": "0712345678", "amount": 500, "frequency": "one-time", "payment_method": "M-Pesa"})
 
     resp = client.get("/api/analytics/dashboard", headers=auth_header(token))
     body = resp.get_json()["dashboard"]["feeding_resources"]

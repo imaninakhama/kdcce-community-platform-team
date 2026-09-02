@@ -70,8 +70,7 @@ unauthenticated write endpoint (`register`, `login`, `POST /api/donations`,
 | Assignment calendar | [calendar.md](calendar.md) | Implemented |
 | Global search | [search.md](search.md) | Implemented |
 | Donations | [donations.md](donations.md) | Implemented |
-| Blog | [blog.md](blog.md) | Implemented |
 | Gallery | [gallery.md](gallery.md) | Implemented |
-| Crafts | [crafts.md](crafts.md) | Implemented |
 | Team | [team.md](team.md) | Implemented |
+| Admin & staff accounts | [users.md](users.md) | Implemented |
 | Clinic/medical visits | — | Not built yet — add a doc file here as each module lands |
