@@ -10,12 +10,13 @@ function fmtTime(iso) {
 
 // Shared lifecycle UI for a HomeVisit or AssistanceRequest, from the
 // volunteer's side: Accept -> Start -> (checklist, home visits only) ->
-// Completion Report. Reuses the existing PATCH .../<id> (assignee-scoped
-// schema, server-stamps started_at/completed_at) and the existing
-// AssistanceRequest accept endpoint — no new assignment-status machinery
-// beyond what homevisits/assistance routes.py already added.
+// Completion Report. Start/completion reuse the existing PATCH .../<id>
+// (assignee-scoped schema, server-stamps started_at/completed_at);
+// acceptance always goes through the dedicated POST .../accept endpoint
+// (homevisits/assistance routes.py), which enforces ownership and the
+// Assigned -> Accepted transition server-side.
 export default function AssignmentWorkflow({
-  basePath, assignmentType, status, startedAt, acceptViaEndpoint, workFields, hasChecklist, onSaved, showToast,
+  basePath, assignmentType, status, startedAt, workFields, hasChecklist, onSaved, showToast,
 }) {
   const [busy, setBusy] = useState(false)
   const [showComplete, setShowComplete] = useState(false)
@@ -39,8 +40,7 @@ export default function AssignmentWorkflow({
   async function accept() {
     setBusy(true)
     try {
-      if (acceptViaEndpoint) await apiFetch(`${basePath}/accept`, { method: 'POST' })
-      else await apiFetch(basePath, { method: 'PATCH', body: { status: 'Accepted' } })
+      await apiFetch(`${basePath}/accept`, { method: 'POST' })
       showToast('Assignment accepted')
       onSaved()
     } catch (err) { showToast(errorMessage(err)) } finally { setBusy(false) }

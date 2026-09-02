@@ -198,7 +198,7 @@ export default function Donate() {
           <p className="px-6 pb-2 pt-6 text-sm leading-7 text-kMuted">Thank you for your generosity. Your {receipt.frequency === 'monthly' ? 'monthly' : ''} gift helps fund meals, healthcare support, activities and dignity for older persons at our centre.</p>
 
           <div className="mt-6 grid gap-3 border-t border-kBorderSoft bg-kCream px-6 py-5 text-xs text-kMuted sm:grid-cols-3">
-            <div className="flex items-center gap-2"><Phone size={14} className="text-kOrange" /> +254 724 380 025</div>
+            <div className="flex items-center gap-2"><Phone size={14} className="text-kOrange" /> <a href="tel:+254796755846" className="hover:underline">+254 796 755 846</a></div>
             <div className="flex items-center gap-2"><Mail size={14} className="text-kOrange" /> info@kdcce.org</div>
             <div className="flex items-center gap-2"><MapPin size={14} className="text-kOrange" /> Kibera, Nairobi, Kenya</div>
           </div>

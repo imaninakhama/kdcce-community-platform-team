@@ -44,12 +44,9 @@ The app includes an error boundary so runtime errors display on the page instead
 - `/about`
 - `/programs`
 - `/gallery`
-- `/blog`
-- `/blog/1`
 - `/sponsor`
 - `/donate`
 - `/contact`
-- `/crafts`
 - `/admin/login`
 - `/admin`
 
@@ -68,4 +65,4 @@ The frontend uses the supplied KDCCE logo at `public/images/logo.png` and derive
 
 ## Admin portal
 
-The repository includes the **admin portal UI** under `/admin/login` and `/admin/*`. Donations, blog posts, gallery images, team members, and craft items are wired to the real backend (auth, RBAC, CRUD, CSV export). The Inbox tab is still mock/local state — it has no backend yet. The frontend is never the security boundary; permissions are enforced by the backend regardless of what the UI shows or hides.
+The repository includes the **admin portal UI** under `/admin/login` and `/admin/*`. Donations, gallery images, team members, admin/staff accounts, and the contact-form inbox are all wired to the real backend (auth, RBAC, CRUD, CSV export). The frontend is never the security boundary; permissions are enforced by the backend regardless of what the UI shows or hides.

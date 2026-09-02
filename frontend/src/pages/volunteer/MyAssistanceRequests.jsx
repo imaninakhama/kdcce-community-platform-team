@@ -39,7 +39,7 @@ function UpdateModal({ reqId, onClose, onListChanged, showToast }) {
 
     <AssignmentWorkflow
       basePath={basePath} assignmentType="assistance_request" status={req.status} startedAt={req.started_at}
-      acceptViaEndpoint workFields={WORK_FIELDS} hasChecklist={false} showToast={showToast} onSaved={refreshed}
+      workFields={WORK_FIELDS} hasChecklist={false} showToast={showToast} onSaved={refreshed}
     />
 
     <div className="mt-6 border-t border-kBorderSoft pt-5"><AssignmentReview basePath={basePath} status={req.status} showToast={showToast} /></div>

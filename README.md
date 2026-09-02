@@ -1,9 +1,11 @@
 # KDCCE Community Platform
 
-Software for Kibera Day Care Centre for the Elderly (KDCCE): a public site
-(programs, gallery, blog, donations, craft shop) today, growing into an
-internal elderly-care operations system (elderly member records, attendance,
-health & wellness, home visits, volunteer management, and more).
+A course project inspired by the mission of Kibera Day Care Centre for the
+Elderly (KDCCE) — **not affiliated with or endorsed by the real
+organization**. A public site (programs, gallery, team, donations, contact)
+today, growing into an internal elderly-care operations system (elderly
+member records, attendance, health & wellness, home visits, volunteer
+management, and more).
 
 This is a group project. The repo is split so frontend and backend teams can
 work independently against a documented API contract.
@@ -153,6 +155,53 @@ curl -X POST http://localhost:5000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"name":"...","email":"...@example.com","password":"..."}'
 ```
+
+## Donations — M-Pesa sandbox testing
+
+The public donation form (`/donate`, and the monthly option on `/sponsor`)
+goes through Safaricom's real Daraja **sandbox** API — no other payment
+method is wired up, and nothing here ever touches real money. To exercise
+the full flow locally:
+
+1. Create a free app at [developer.safaricom.co.ke](https://developer.safaricom.co.ke)
+   and copy its sandbox **Consumer Key**/**Consumer Secret**.
+2. Set `MPESA_CONSUMER_KEY` / `MPESA_CONSUMER_SECRET` in `backend/.env`.
+   `MPESA_SHORTCODE`/`MPESA_PASSKEY` already default to Safaricom's shared
+   published sandbox test values — you only need your own if you were
+   issued a dedicated sandbox shortcode.
+3. Safaricom's servers call your callback directly, so `localhost` doesn't
+   work for `MPESA_CALLBACK_URL` — run a tunnel (`ngrok http 5000`) and set
+   `MPESA_CALLBACK_URL=https://<your-id>.ngrok-free.app/api/mpesa/callback`.
+4. Use one of Safaricom's published sandbox test phone numbers when the
+   donation form asks for an M-Pesa number, e.g. **254708374149** — see
+   [Safaricom's Daraja docs](https://developer.safaricom.co.ke/Documentation)
+   for the current list and sandbox PIN.
+
+Without this configured, the donation form still works end-to-end for
+everything except the actual STK push: it returns a clear "M-Pesa is not
+configured" error (502) instead of a confusing failure. A donation is only
+ever marked Paid by Safaricom's own callback confirming it, never
+optimistically — a confirmation receipt is shown on-screen either way, and
+a confirmation email is sent (or logged to the backend console if no
+`RESEND_API_KEY`/`SMTP_HOST` is configured — see `backend/.env.example`)
+once the callback confirms payment.
+
+## Deployment
+
+Not deployed by default — this repo ships everything needed to deploy it,
+but actually doing so requires your own hosting accounts/credentials.
+
+- **Backend**: `backend/Procfile` runs `flask db upgrade` on release, then
+  serves via `gunicorn wsgi:app` — this is the standard shape expected by
+  Render, Railway, Fly.io, and Heroku-style platforms. Set `DATABASE_URL`
+  to a real Postgres/MySQL instance (SQLite is dev-only) and every
+  `backend/.env.example` variable relevant to the features you want live
+  (at minimum `SECRET_KEY`, `JWT_SECRET_KEY`, `CORS_ORIGINS` set to your
+  deployed frontend's origin, and the M-Pesa/email variables above if you
+  want donations and notification emails to work in production too).
+- **Frontend**: `npm run build` in `frontend/` produces a static `dist/`
+  deployable to any static host (Netlify, Vercel, GitHub Pages, etc.) —
+  set `VITE_API_URL` to your deployed backend's URL before building.
 
 ## Team ownership
 

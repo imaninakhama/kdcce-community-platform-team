@@ -4,6 +4,7 @@ import VolunteerShell from '../../components/volunteer/VolunteerShell'
 import { LoadingState, ErrorState } from '../../components/admin/adminHelpers'
 import { getStoredUser } from '../../lib/api'
 import { useVolunteerData } from '../../lib/VolunteerDataContext'
+import { VOLUNTEER_STATUS_LABELS, VOLUNTEER_STATUS_STYLES } from '../../lib/volunteerStatus'
 
 function isToday(iso) {
   if (!iso) return false
@@ -50,7 +51,7 @@ export default function VolunteerDashboard({ profile }) {
 
   return <VolunteerShell>
     <div><div className="eyebrow">Welcome</div><h1 className="font-display text-3xl font-bold text-kGreen">{greeting()}, {user?.name?.split(' ')[0] || 'there'}</h1>
-      <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-kGreen/10 px-3 py-1 text-xs font-bold text-kGreen"><ShieldCheck size={13} /> {profile.status}</span>
+      <span className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${VOLUNTEER_STATUS_STYLES[profile.status]}`}><ShieldCheck size={13} /> {VOLUNTEER_STATUS_LABELS[profile.status]}</span>
     </div>
 
     <div className="mt-7 grid gap-4 sm:grid-cols-4">

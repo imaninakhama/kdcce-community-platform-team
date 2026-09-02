@@ -2,16 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import VolunteerShell from '../../components/volunteer/VolunteerShell'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { apiFetch } from '../../lib/api'
+import { VOLUNTEER_STATUS_LABELS, VOLUNTEER_STATUS_STYLES } from '../../lib/volunteerStatus'
 
 const STATUS_COPY = {
-  Pending: 'Your profile is awaiting review by KDCCE staff.',
-  Verified: "You're verified — staff can now assign you to home visits and activities.",
+  Pending: 'Your profile is awaiting review by KDCCE staff. You can update your details below any time while you wait — approval-only features (home visits, assistance requests) stay locked until an admin approves your application.',
+  Verified: "You're approved — staff can now assign you to home visits and activities.",
   Rejected: 'Your volunteer application was not approved. Contact KDCCE staff with any questions.',
-}
-const STATUS_STYLES = {
-  Pending: 'bg-kTint text-kOrange',
-  Verified: 'bg-kGreen/10 text-kGreen',
-  Rejected: 'bg-red-100 text-red-700',
 }
 
 export default function MyVolunteerProfile({ showToast }) {
@@ -56,7 +52,7 @@ export default function MyVolunteerProfile({ showToast }) {
 
     {loading ? <LoadingState label="profile" /> : error ? <ErrorState message={error} onRetry={load} /> : <>
       <div className="card-k mt-7 p-6">
-        <span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLES[profile.status]}`}>{profile.status}</span>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${VOLUNTEER_STATUS_STYLES[profile.status]}`}>{VOLUNTEER_STATUS_LABELS[profile.status]}</span>
         <p className="mt-3 text-sm text-kMuted">{STATUS_COPY[profile.status]}</p>
       </div>
 
