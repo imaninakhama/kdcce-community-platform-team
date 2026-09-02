@@ -1,0 +1,43 @@
+databases:
+  - name: kdcce-db
+    plan: free
+
+services:
+  - type: web
+    name: kdcce-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: "pip install -r requirements.txt && flask db upgrade"
+    startCommand: "gunicorn wsgi:app"
+    envVars:
+      - key: FLASK_APP
+        value: wsgi.py
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kdcce-db
+          property: connectionString
+      # Set these in the Render dashboard after the service is created:
+      # CORS_ORIGINS / FRONTEND_URL to your deployed frontend's URL (e.g.
+      # https://your-app.vercel.app), and any of RESEND_API_KEY,
+      # MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_CALLBACK_URL you
+      # want live in production — see backend/.env.example for what each
+      # does. None are required for the app to boot.
+      - key: CORS_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_CALLBACK_URL
+        sync: false
