@@ -1,8 +1,16 @@
 from marshmallow import Schema, fields, validate, validates_schema, ValidationError
 
-from ..models import DONATION_FREQUENCIES, DONATION_STATUSES, DONATION_TYPES
+from ..models import DONATION_FREQUENCIES, DONATION_TYPES
 
 ALLOWED_CURRENCIES = ("KES",)
+# The public donation form only ever goes through a real sandbox gateway —
+# M-Pesa Daraja STK push (app/mpesa/service.py) — so it's the only
+# payment_method a donor can submit. "Card (Stripe)"/"PayPal" remain valid
+# for AdminDonationCreateSchema below, where staff are logging a donation
+# already completed offline (e.g. a donor reports a PayPal transfer),
+# never a live in-flight payment the public form would otherwise have to
+# fake-approve without ever charging anyone.
+PUBLIC_PAYMENT_METHODS = ("M-Pesa",)
 ALLOWED_PAYMENT_METHODS = ("M-Pesa", "Card (Stripe)", "PayPal")
 
 
@@ -22,7 +30,7 @@ class DonationCreateSchema(Schema):
     currency = fields.String(load_default="KES", validate=validate.OneOf(ALLOWED_CURRENCIES))
     frequency = fields.String(required=True, validate=validate.OneOf(DONATION_FREQUENCIES))
     campaign = fields.String(load_default=None, validate=validate.Length(max=120))
-    payment_method = fields.String(load_default=None, validate=validate.OneOf(ALLOWED_PAYMENT_METHODS))
+    payment_method = fields.String(required=True, validate=validate.OneOf(PUBLIC_PAYMENT_METHODS))
     message = fields.String(load_default=None, validate=validate.Length(max=2000))
 
 
@@ -62,21 +70,3 @@ class AdminDonationCreateSchema(Schema):
             raise ValidationError(errors)
 
 
-class DonationUpdateSchema(Schema):
-    """Admin/staff-only edit. Unlike creation, status IS editable here —
-    it's an authenticated internal workflow change, not a payment claim.
-    No load_default on any field (including the new ones): omitted on a
-    partial PATCH must mean "leave it alone," never "reset it.\""""
-
-    donation_type = fields.String(validate=validate.OneOf(DONATION_TYPES))
-    donor_name = fields.String(validate=validate.Length(min=1, max=120))
-    donor_email = fields.Email(allow_none=True)
-    donor_phone = fields.String(allow_none=True, validate=validate.Length(max=40))
-    amount = fields.Decimal(allow_none=True, as_string=False, places=2, validate=validate.Range(min=0.01))
-    frequency = fields.String(validate=validate.OneOf(DONATION_FREQUENCIES))
-    campaign = fields.String(allow_none=True, validate=validate.Length(max=120))
-    payment_method = fields.String(allow_none=True, validate=validate.OneOf(ALLOWED_PAYMENT_METHODS))
-    item_description = fields.String(allow_none=True, validate=validate.Length(max=1000))
-    quantity = fields.Decimal(allow_none=True, as_string=False, places=2, validate=validate.Range(min=0.01))
-    unit = fields.String(allow_none=True, validate=validate.Length(max=30))
-    status = fields.String(validate=validate.OneOf(DONATION_STATUSES))

@@ -3,8 +3,21 @@ import io
 from datetime import date
 
 from flask import abort, jsonify, make_response
+from flask_jwt_extended import create_access_token, create_refresh_token
 
 from .extensions import db
+
+
+def issue_tokens(user):
+    """The single place that mints an access/refresh token pair for a
+    user — used by every flow that ends in a real session (login,
+    register, and volunteer-invitation acceptance), so the JWT claims
+    shape can never drift between them."""
+    claims = {"role": user.role}
+    return (
+        create_access_token(identity=str(user.id), additional_claims=claims),
+        create_refresh_token(identity=str(user.id), additional_claims=claims),
+    )
 
 
 def get_or_404(model, object_id):

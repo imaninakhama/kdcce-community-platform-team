@@ -7,8 +7,9 @@ caregiver/volunteer profile model.
 
 Team member object:
 ```json
-{ "id": 1, "name": "...", "role": "Program Coordinator", "image": "/images/team-derrick.jpg", "created_at": "...", "updated_at": "..." }
+{ "id": 1, "name": "...", "role": "Program Coordinator", "image": "/images/team-derrick.jpg", "social_link": null, "created_at": "...", "updated_at": "..." }
 ```
+`social_link` is an optional single URL (LinkedIn, personal site, etc.) — `null` if not set.
 
 ## GET /api/team
 
@@ -20,7 +21,7 @@ Team member object:
 - **Auth:** `admin` or `staff`.
 - **Request:**
   ```json
-  { "name": "string, required, max 120", "role": "string, required, max 120", "image": "string, required, max 500" }
+  { "name": "string, required, max 120", "role": "string, required, max 120", "image": "string, required, max 500", "social_link": "string, optional, max 500" }
   ```
 - **Response `201`:** `{ "member": { ... } }`
 - **Errors:** `400` validation.
@@ -28,7 +29,7 @@ Team member object:
 ## PATCH /api/admin/team/{id}
 
 - **Auth:** `admin` or `staff`.
-- **Request:** any subset of `name`, `role`, `image` (partial).
+- **Request:** any subset of `name`, `role`, `image`, `social_link` (partial).
 - **Response `200`:** `{ "member": { ... } }`
 - **Errors:** `400` validation, `404`.
 

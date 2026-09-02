@@ -38,10 +38,8 @@ STOCK_MOVEMENT_TYPES = ("In", "Out")
 DONATION_TYPES = ("Cash", "Food", "Equipment")
 DONATION_STATUSES = ("Paid", "Pending", "Received", "Failed")
 DONATION_FREQUENCIES = ("one-time", "monthly")
-CRAFT_STATUSES = ("Available", "Reserved", "Sold")
-BLOG_STATUSES = ("Draft", "Published")
 HOME_VISIT_PRIORITIES = ("Low", "Medium", "High", "Urgent")
-HOME_VISIT_STATUSES = ("Pending", "Assigned", "Scheduled", "Started", "In Progress", "Completed", "Cancelled")
+HOME_VISIT_STATUSES = ("Pending", "Assigned", "Accepted", "Scheduled", "Started", "In Progress", "Completed", "Cancelled")
 ASSISTANCE_TYPES = (
     "Hospital Accompaniment", "Transportation", "Food Assistance", "Companionship",
     "Home Support", "Other",
@@ -201,6 +199,26 @@ class VolunteerProfile(db.Model):
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
+
+
+class VolunteerInvitation(db.Model):
+    """A single-use, time-limited link sent in the approval email. Not a
+    login gate — a volunteer can already sign in with their own password
+    the moment their profile is Verified (they set it at registration;
+    see auth/routes.py login()). This just lets that same email land them
+    straight back in a real session without re-entering credentials, and
+    is deliberately never required."""
+
+    __tablename__ = "volunteer_invitations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    volunteer_profile_id = db.Column(db.Integer, db.ForeignKey("volunteer_profiles.id"), nullable=False, index=True)
+    token = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    accepted_at = db.Column(db.DateTime(timezone=True))
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
+
+    volunteer_profile = db.relationship("VolunteerProfile", foreign_keys=[volunteer_profile_id])
 
 
 class Attendance(db.Model):
@@ -834,60 +852,6 @@ class InboxMessage(db.Model):
         }
 
 
-class BlogPost(db.Model):
-    __tablename__ = "blog_posts"
-
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    excerpt = db.Column(db.Text)
-    image = db.Column(db.String(500))
-    type = db.Column(db.String(40), nullable=False, default="Story")
-    status = db.Column(db.String(20), nullable=False, default="Draft")
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "title": self.title,
-            "excerpt": self.excerpt,
-            "image": self.image,
-            "type": self.type,
-            "status": self.status,
-            "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
-        }
-
-
-class Craft(db.Model):
-    __tablename__ = "crafts"
-
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    category = db.Column(db.String(60), nullable=False)
-    maker = db.Column(db.String(120), nullable=False)
-    price = db.Column(db.Numeric(10, 2), nullable=False)
-    status = db.Column(db.String(20), nullable=False, default="Available")
-    image = db.Column(db.String(500))
-    description = db.Column(db.Text)
-    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "title": self.title,
-            "category": self.category,
-            "maker": self.maker,
-            "price": _num(self.price),
-            "status": self.status,
-            "image": self.image,
-            "description": self.description,
-            "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
-        }
-
-
 class GalleryImage(db.Model):
     __tablename__ = "gallery_images"
 
@@ -914,6 +878,7 @@ class TeamMember(db.Model):
     name = db.Column(db.String(120), nullable=False)
     role = db.Column(db.String(120), nullable=False)
     image = db.Column(db.String(500), nullable=False)
+    social_link = db.Column(db.String(500))
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
 
@@ -923,6 +888,7 @@ class TeamMember(db.Model):
             "name": self.name,
             "role": self.role,
             "image": self.image,
+            "social_link": self.social_link,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }

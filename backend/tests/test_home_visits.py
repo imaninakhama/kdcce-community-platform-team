@@ -239,6 +239,97 @@ def test_staff_cannot_assign_to_unverified_volunteer_via_patch(client, make_user
     assert resp.status_code == 400
 
 
+# ---------- Accept ----------
+
+def test_assignee_cannot_set_status_to_accepted_via_patch(client, make_user, make_staff_user, auth_header):
+    _, admin_token = make_staff_user("admin")
+    member = _register_member(client, admin_token, auth_header)
+    vol_user, vol_token = _verified_volunteer(client, make_user, auth_header, admin_token)
+    visit = client.post("/api/home-visits", json={"elderly_member_id": member["id"], "assigned_to_id": vol_user["id"], **VALID_REASON}, headers=auth_header(admin_token)).get_json()["visit"]
+
+    resp = client.patch(f"/api/home-visits/{visit['id']}", json={"status": "Accepted"}, headers=auth_header(vol_token))
+    assert resp.status_code == 400  # "Accepted" is not in the assignee-settable status list
+
+
+def test_assignee_can_accept_their_assigned_visit(client, make_user, make_staff_user, auth_header):
+    _, admin_token = make_staff_user("admin")
+    member = _register_member(client, admin_token, auth_header)
+    vol_user, vol_token = _verified_volunteer(client, make_user, auth_header, admin_token)
+    visit = client.post("/api/home-visits", json={"elderly_member_id": member["id"], "assigned_to_id": vol_user["id"], **VALID_REASON}, headers=auth_header(admin_token)).get_json()["visit"]
+
+    resp = client.post(f"/api/home-visits/{visit['id']}/accept", headers=auth_header(vol_token))
+    assert resp.status_code == 200
+    assert resp.get_json()["visit"]["status"] == "Accepted"
+
+
+def test_cannot_accept_a_visit_not_assigned_to_you(client, make_user, make_staff_user, auth_header):
+    _, admin_token = make_staff_user("admin")
+    member = _register_member(client, admin_token, auth_header)
+    vol_user, _ = _verified_volunteer(client, make_user, auth_header, admin_token)
+    visit = client.post("/api/home-visits", json={"elderly_member_id": member["id"], "assigned_to_id": vol_user["id"], **VALID_REASON}, headers=auth_header(admin_token)).get_json()["visit"]
+    _, other_token, _ = make_user(email="someoneelse-hv@example.com")
+
+    resp = client.post(f"/api/home-visits/{visit['id']}/accept", headers=auth_header(other_token))
+    assert resp.status_code == 403
+
+
+def test_cannot_accept_an_unassigned_visit(client, make_staff_user, auth_header):
+    _, token = make_staff_user("admin")
+    member = _register_member(client, token, auth_header)
+    visit = client.post("/api/home-visits", json={"elderly_member_id": member["id"], **VALID_REASON}, headers=auth_header(token)).get_json()["visit"]  # status: Pending, no assignee
+
+    resp = client.post(f"/api/home-visits/{visit['id']}/accept", headers=auth_header(token))
+    assert resp.status_code == 403  # nobody is assigned, so no one (including the creator) can accept it
+
+
+def test_cannot_accept_a_visit_that_is_not_yet_assigned_status(client, make_user, make_staff_user, auth_header):
+    """Reassigning bumps a visit back to Assigned, but a staff edit that
+    moves it straight to e.g. Scheduled must not leave it acceptable."""
+    _, admin_token = make_staff_user("admin")
+    member = _register_member(client, admin_token, auth_header)
+    vol_user, vol_token = _verified_volunteer(client, make_user, auth_header, admin_token)
+    visit = client.post("/api/home-visits", json={"elderly_member_id": member["id"], "assigned_to_id": vol_user["id"], **VALID_REASON}, headers=auth_header(admin_token)).get_json()["visit"]
+    client.patch(f"/api/home-visits/{visit['id']}", json={"status": "Scheduled"}, headers=auth_header(admin_token))
+
+    resp = client.post(f"/api/home-visits/{visit['id']}/accept", headers=auth_header(vol_token))
+    assert resp.status_code == 409
+    assert "Scheduled" in resp.get_json()["error"]
+    assert "Assigned" in resp.get_json()["error"]
+
+
+def test_cannot_accept_twice(client, make_user, make_staff_user, auth_header):
+    _, admin_token = make_staff_user("admin")
+    member = _register_member(client, admin_token, auth_header)
+    vol_user, vol_token = _verified_volunteer(client, make_user, auth_header, admin_token)
+    visit = client.post("/api/home-visits", json={"elderly_member_id": member["id"], "assigned_to_id": vol_user["id"], **VALID_REASON}, headers=auth_header(admin_token)).get_json()["visit"]
+    client.post(f"/api/home-visits/{visit['id']}/accept", headers=auth_header(vol_token))
+
+    resp = client.post(f"/api/home-visits/{visit['id']}/accept", headers=auth_header(vol_token))
+    assert resp.status_code == 409
+
+
+def test_accept_rejects_invalid_visit_id(client, make_user, auth_header):
+    _, vol_token, _ = make_user(email="vol-invalid-visit@example.com")
+    resp = client.post("/api/home-visits/999999/accept", headers=auth_header(vol_token))
+    assert resp.status_code == 404
+
+
+def test_assignee_can_progress_and_complete_after_accepting(client, make_user, make_staff_user, auth_header):
+    _, admin_token = make_staff_user("admin")
+    member = _register_member(client, admin_token, auth_header)
+    vol_user, vol_token = _verified_volunteer(client, make_user, auth_header, admin_token)
+    visit = client.post("/api/home-visits", json={"elderly_member_id": member["id"], "assigned_to_id": vol_user["id"], **VALID_REASON}, headers=auth_header(admin_token)).get_json()["visit"]
+    client.post(f"/api/home-visits/{visit['id']}/accept", headers=auth_header(vol_token))
+
+    started = client.patch(f"/api/home-visits/{visit['id']}", json={"status": "Started"}, headers=auth_header(vol_token))
+    assert started.status_code == 200
+    assert started.get_json()["visit"]["started_at"] is not None
+
+    completed = client.patch(f"/api/home-visits/{visit['id']}", json={"status": "Completed", "observations": "Doing well"}, headers=auth_header(vol_token))
+    assert completed.status_code == 200
+    assert completed.get_json()["visit"]["status"] == "Completed"
+
+
 # ---------- Delete ----------
 
 def test_admin_can_delete_visit(client, make_staff_user, auth_header):

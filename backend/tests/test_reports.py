@@ -337,9 +337,10 @@ def test_inventory_report_csv_export(client, make_staff_user, auth_header):
 
 # ---------- Donations report ----------
 
-def test_donations_report_totals_by_type(client, make_staff_user, auth_header):
+def test_donations_report_totals_by_type(client, monkeypatch, make_staff_user, auth_header):
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_report_totals")
     _, token = make_staff_user("admin")
-    client.post("/api/donations", json={"donor_name": "Amina", "donor_email": "amina@example.com", "amount": 1000, "frequency": "one-time"})
+    client.post("/api/donations", json={"donor_name": "Amina", "donor_email": "amina@example.com", "donor_phone": "0712345678", "amount": 1000, "frequency": "one-time", "payment_method": "M-Pesa"})
     client.post("/api/admin/donations", json={"donation_type": "Food", "donor_name": "Grocer", "item_description": "Rice", "quantity": 20, "unit": "kg"}, headers=auth_header(token))
 
     resp = client.get("/api/reports/donations", headers=auth_header(token))
@@ -349,10 +350,14 @@ def test_donations_report_totals_by_type(client, make_staff_user, auth_header):
     assert body["cash_total"] == 1000.0
 
 
-def test_donations_history_is_paginated(client, make_staff_user, auth_header):
+def test_donations_history_is_paginated(client, monkeypatch, make_staff_user, auth_header):
+    # mpesa_checkout_request_id is unique per donation — a fresh id per
+    # call, since this test creates several donations in a loop.
+    counter = iter(range(1, 100000))
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: f"ws_CO_report_paginated_{next(counter)}")
     _, token = make_staff_user("admin")
     for i in range(5):
-        client.post("/api/donations", json={"donor_name": f"Donor {i}", "donor_email": f"d{i}@example.com", "amount": 100, "frequency": "one-time"})
+        client.post("/api/donations", json={"donor_name": f"Donor {i}", "donor_email": f"d{i}@example.com", "donor_phone": "0712345678", "amount": 100, "frequency": "one-time", "payment_method": "M-Pesa"})
 
     resp = client.get("/api/reports/donations/history?page=1&per_page=2", headers=auth_header(token))
     body = resp.get_json()
@@ -361,9 +366,10 @@ def test_donations_history_is_paginated(client, make_staff_user, auth_header):
     assert body["pagination"]["pages"] == 3
 
 
-def test_donations_history_filters_by_type_and_date(client, make_staff_user, auth_header):
+def test_donations_history_filters_by_type_and_date(client, monkeypatch, make_staff_user, auth_header):
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_report_filter")
     _, token = make_staff_user("admin")
-    client.post("/api/donations", json={"donor_name": "Amina", "donor_email": "amina@example.com", "amount": 1000, "frequency": "one-time"})
+    client.post("/api/donations", json={"donor_name": "Amina", "donor_email": "amina@example.com", "donor_phone": "0712345678", "amount": 1000, "frequency": "one-time", "payment_method": "M-Pesa"})
     client.post("/api/admin/donations", json={"donation_type": "Food", "donor_name": "Grocer", "item_description": "Rice", "quantity": 20, "unit": "kg"}, headers=auth_header(token))
 
     resp = client.get("/api/reports/donations/history?donation_type=Food", headers=auth_header(token))

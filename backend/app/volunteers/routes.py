@@ -1,18 +1,31 @@
-from flask import Blueprint, jsonify, request
+from datetime import timezone
+
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 
 from ..auth.decorators import roles_required
-from ..extensions import db
-from ..models import AssistanceRequest, FollowUp, HomeVisit, VolunteerProfile, utcnow
+from ..extensions import db, limiter
+from ..models import AssistanceRequest, FollowUp, HomeVisit, VolunteerInvitation, VolunteerProfile, utcnow
 from ..notifications.service import notify
-from ..utils import get_or_404, validation_error_response
+from ..utils import get_or_404, issue_tokens, validation_error_response
 from .schemas import VolunteerSelfUpdateSchema, VolunteerStaffUpdateSchema
+from .service import create_invitation, send_approved_email, send_rejected_email
 
 bp = Blueprint("volunteers", __name__, url_prefix="/api/volunteers")
 
 self_schema = VolunteerSelfUpdateSchema()
 staff_schema = VolunteerStaffUpdateSchema()
+
+
+def _as_naive_utc(dt):
+    """SQLite does not reliably round-trip a DateTime(timezone=True)
+    column's tzinfo across a session boundary — a value just assigned in
+    Python this request is timezone-aware, but the identical column
+    re-loaded fresh from the database can come back naive. Needed here to
+    compare an invitation's expires_at against a freshly-computed
+    utcnow() without a spurious naive-vs-aware TypeError."""
+    return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo is not None else dt
 
 
 def _is_verified_volunteer(user_id):
@@ -183,6 +196,15 @@ def update_volunteer(volunteer_id):
                 "Your volunteer application has been verified. You can now be assigned to home visits and assistance requests.",
                 related_resource_type="volunteer_profile", related_resource_id=profile.id,
             )
+            invitation = create_invitation(profile)
+            try:
+                send_approved_email(profile.user, invitation)
+            except Exception:
+                # The approval itself (the status change below + commit)
+                # must never be lost over a flaky mail server — an admin
+                # can always re-send by flipping the status back and
+                # forward again if a volunteer says they never got it.
+                current_app.logger.exception("Failed to send approval email to %s", profile.user.email)
         elif data["status"] == "Rejected":
             reason = data.get("rejection_reason")
             message = "Your KDCCE volunteer application was not approved."
@@ -193,6 +215,10 @@ def update_volunteer(volunteer_id):
                 message,
                 related_resource_type="volunteer_profile", related_resource_id=profile.id,
             )
+            try:
+                send_rejected_email(profile.user, reason)
+            except Exception:
+                current_app.logger.exception("Failed to send rejection email to %s", profile.user.email)
         if data["status"] != "Rejected":
             # A reason only ever makes sense attached to the rejection it
             # explains — clear any stale one left over from an earlier
@@ -204,3 +230,44 @@ def update_volunteer(volunteer_id):
         setattr(profile, field, value)
     db.session.commit()
     return jsonify(volunteer=profile.to_dict()), 200
+
+
+# ---------- Invitation acceptance ----------
+# Public, unauthenticated — the volunteer clicking the link in their
+# approval email has no session yet; accepting one is what creates it.
+# Never a login *gate*: the same volunteer can already sign in normally
+# with the password they set at registration the moment they're Verified
+# (see auth/routes.py login()), whether or not they ever open this link.
+
+def _get_invitation_or_error(token):
+    invitation = VolunteerInvitation.query.filter_by(token=token).first()
+    if invitation is None:
+        return None, (jsonify(error="This invitation link isn't valid."), 404)
+    if invitation.accepted_at is not None:
+        return None, (jsonify(error="This invitation has already been used. You can sign in with your existing account."), 409)
+    if _as_naive_utc(invitation.expires_at) < _as_naive_utc(utcnow()):
+        return None, (jsonify(error="This invitation link has expired. You can still sign in with your existing account."), 410)
+    return invitation, None
+
+
+@bp.get("/invitations/<token>")
+@limiter.limit("20 per minute")
+def get_invitation(token):
+    invitation, err = _get_invitation_or_error(token)
+    if err:
+        return err
+    return jsonify(volunteer_name=invitation.volunteer_profile.user.name), 200
+
+
+@bp.post("/invitations/<token>/accept")
+@limiter.limit("10 per minute")
+def accept_invitation(token):
+    invitation, err = _get_invitation_or_error(token)
+    if err:
+        return err
+
+    invitation.accepted_at = utcnow()
+    user = invitation.volunteer_profile.user
+    access_token, refresh_token = issue_tokens(user)
+    db.session.commit()
+    return jsonify(user=user.to_dict(), access_token=access_token, refresh_token=refresh_token), 200

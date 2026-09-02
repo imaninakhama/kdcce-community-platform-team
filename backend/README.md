@@ -1,11 +1,10 @@
 # KDCCE API (backend)
 
-Flask backend for the KDCCE course project. Step 1 of the plan in
-`.claude/plans/calm-meandering-dragon.md`: app skeleton, database,
-migrations, and JWT auth (register/login/refresh/me) with three roles
-(`admin`, `staff`, `volunteer`). Everything else in that plan — donations,
-content CRUD, messaging, tasks, hours, events, announcements, notifications —
-is not built yet.
+Flask backend for the KDCCE course project. Step 1 of the build plan:
+app skeleton, database, migrations, and JWT auth (register/login/refresh/me)
+with three roles (`admin`, `staff`, `volunteer`). Everything else in that
+plan — donations, content CRUD, messaging, tasks, hours, events,
+announcements, notifications — is not built yet.
 
 ## Setup
 

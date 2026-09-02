@@ -1,7 +1,6 @@
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import (
     create_access_token,
-    create_refresh_token,
     decode_token,
     get_jwt,
     get_jwt_identity,
@@ -11,21 +10,14 @@ from marshmallow import ValidationError
 
 from ..extensions import db, limiter
 from ..models import RevokedToken, User, VolunteerProfile
-from ..utils import validation_error_response
+from ..utils import issue_tokens, validation_error_response
+from ..volunteers.service import send_application_received_email
 from .schemas import LoginSchema, RegisterSchema
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 register_schema = RegisterSchema()
 login_schema = LoginSchema()
-
-
-def _issue_tokens(user):
-    claims = {"role": user.role}
-    return (
-        create_access_token(identity=str(user.id), additional_claims=claims),
-        create_refresh_token(identity=str(user.id), additional_claims=claims),
-    )
 
 
 @bp.post("/register")
@@ -49,7 +41,14 @@ def register():
     db.session.add(profile)
     db.session.commit()
 
-    access_token, refresh_token = _issue_tokens(user)
+    try:
+        send_application_received_email(user)
+    except Exception:
+        # Never let a flaky mail server break a successful registration —
+        # the account and profile above are already committed regardless.
+        current_app.logger.exception("Failed to send application-received email to %s", user.email)
+
+    access_token, refresh_token = issue_tokens(user)
     return jsonify(user=user.to_dict(), access_token=access_token, refresh_token=refresh_token), 201
 
 
@@ -66,7 +65,7 @@ def login():
     if user is None or not user.check_password(data["password"]):
         return jsonify(error="Invalid email or password"), 401
 
-    access_token, refresh_token = _issue_tokens(user)
+    access_token, refresh_token = issue_tokens(user)
     return jsonify(user=user.to_dict(), access_token=access_token, refresh_token=refresh_token), 200
 
 

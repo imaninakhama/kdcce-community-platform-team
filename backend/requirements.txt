@@ -8,4 +8,7 @@ marshmallow==3.26.2
 python-dotenv==1.2.3
 requests==2.32.3
 gunicorn==22.0.0
+# Only needed when DATABASE_URL points at Postgres (see README's
+# Deployment section) — SQLite (the local-dev default) needs no driver.
+psycopg2-binary==2.9.10
 pytest==9.1.1
