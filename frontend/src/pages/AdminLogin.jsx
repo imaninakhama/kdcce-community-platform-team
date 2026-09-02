@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { LockKeyhole, ShieldCheck, AlertCircle } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import ThemeToggle from '../theme/ThemeToggle'
 import { apiFetch, setSession, ApiError } from '../lib/api'
 
 export default function AdminLogin(){
   const navigate = useNavigate()
+  const location = useLocation()
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState('')
 
@@ -21,7 +22,13 @@ export default function AdminLogin(){
         body: { email: f.get('email'), password: f.get('password') }
       })
       setSession(access_token, user, refresh_token)
-      navigate(user.role === 'volunteer' ? '/volunteer' : '/admin')
+      if (user.role === 'volunteer') { navigate('/volunteer'); return }
+      // Return to the admin page originally requested (AdminDashboard's
+      // auth gate redirects here with the attempted location in state) —
+      // only for a staff/admin account, never for a path a volunteer was
+      // bounced from, since that path was never meant for them.
+      const from = location.state?.from
+      navigate(from && `${from.pathname}${from.search || ''}`.startsWith('/admin') && from.pathname !== '/admin/login' ? `${from.pathname}${from.search || ''}` : '/admin')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Sign in failed. Please try again.')
       setSigningIn(false)

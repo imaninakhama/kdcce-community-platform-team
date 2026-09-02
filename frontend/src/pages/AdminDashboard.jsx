@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route, Link, Navigate } from 'react-router-dom'
+import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
 import { BarChart3, Search, Plus, Trash2, Pencil, ChevronDown, Settings } from 'lucide-react'
 import Modal from '../components/admin/Modal'
 import Toast from '../components/admin/Toast'
@@ -286,24 +286,49 @@ function AuthChecking() {
   return <div className="grid min-h-[80vh] place-items-center bg-kCream text-sm font-semibold text-kMuted">Checking your session…</div>
 }
 
+const ADMIN_AREA_ROLES = ['admin', 'staff']
+
 // Gate for every /admin/* route except /admin/login: verifies the stored
 // token against the server (a token can be present but expired/revoked)
 // before AdminDashboardRoutes — and the Shell/data/nav it renders — ever
 // mounts, so an unauthenticated visit goes straight to the login form
-// with no dashboard flash.
+// with no dashboard flash. Also checks the returned user's role — a
+// valid token alone isn't enough, since /api/auth/me succeeds for any
+// authenticated account regardless of role; a volunteer's own valid
+// session must not be treated as admin access.
 export default function AdminDashboard() {
-  const [status, setStatus] = useState('checking') // 'checking' | 'authenticated' | 'unauthenticated'
+  const location = useLocation()
+  const [status, setStatus] = useState('checking') // 'checking' | 'authenticated' | 'unauthenticated' | 'forbidden'
+  const [forbiddenRole, setForbiddenRole] = useState(null)
 
   useEffect(() => {
     let cancelled = false
     if (!getToken()) { setStatus('unauthenticated'); return }
     apiFetch('/api/auth/me')
-      .then(() => { if (!cancelled) setStatus('authenticated') })
+      .then(({ user }) => {
+        if (cancelled) return
+        if (!ADMIN_AREA_ROLES.includes(user.role)) { setForbiddenRole(user.role); setStatus('forbidden'); return }
+        setStatus('authenticated')
+      })
       .catch(() => { clearSession(); if (!cancelled) setStatus('unauthenticated') })
     return () => { cancelled = true }
   }, [])
 
+  // A bfcache restore (e.g. hitting Back after navigating away to another
+  // site or tab) can bring this component's DOM back exactly as it was
+  // rendered, without re-running the effect above — so a page frozen
+  // mid-session while authenticated could otherwise reappear intact after
+  // a subsequent logout. Forcing a full reload on a persisted restore
+  // makes the effect above run again from scratch against current
+  // storage/session state.
+  useEffect(() => {
+    function onPageShow(e) { if (e.persisted) window.location.reload() }
+    window.addEventListener('pageshow', onPageShow)
+    return () => window.removeEventListener('pageshow', onPageShow)
+  }, [])
+
   if (status === 'checking') return <AuthChecking />
-  if (status === 'unauthenticated') return <Navigate to="/admin/login" replace />
+  if (status === 'unauthenticated') return <Navigate to="/admin/login" state={{ from: location }} replace />
+  if (status === 'forbidden') return <Navigate to={forbiddenRole === 'volunteer' ? '/volunteer' : '/admin/login'} replace />
   return <AdminDashboardRoutes />
 }
