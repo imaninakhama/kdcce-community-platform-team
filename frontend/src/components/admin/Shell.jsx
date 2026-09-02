@@ -1,5 +1,5 @@
 import { NavLink, Link, useNavigate } from 'react-router-dom'
-import { Activity, BookOpen, Boxes, CalendarDays, ClipboardCheck, FileBarChart, FileImage, Gauge, HandHeart, Heart, HeartPulse, HeartHandshake, Home, Inbox, LayoutDashboard, ListChecks, LogOut, Package, Pill, ShieldAlert, UserRound, Users, Utensils } from 'lucide-react'
+import { Activity, Boxes, CalendarDays, ClipboardCheck, FileImage, Gauge, HandHeart, Heart, HeartPulse, HeartHandshake, Home, Inbox, KeyRound, LayoutDashboard, ListChecks, LogOut, Pill, ShieldAlert, UserRound, Users, Utensils } from 'lucide-react'
 import ThemeToggle from '../../theme/ThemeToggle'
 import NotificationBell from './NotificationBell'
 import GlobalSearch from './GlobalSearch'
@@ -28,20 +28,23 @@ const staffMenu = [
   ['Incidents', '/admin/incidents', 'ShieldAlert'],
   ['Follow-ups', '/admin/followups', 'ListChecks'],
   ['Calendar', '/admin/calendar', 'CalendarDays'],
-  ['Reports', '/admin/reports', 'FileBarChart'],
   ['Donations', '/admin/donations', 'Heart'],
-  ['Blog Posts', '/admin/blog', 'BookOpen'],
   ['Gallery', '/admin/gallery', 'FileImage'],
   ['Team', '/admin/team', 'Users'],
-  ['Craft Shop', '/admin/crafts', 'Package'],
   ['Inbox', '/admin/inbox', 'Inbox'],
 ]
-const icons = { LayoutDashboard, Heart, HeartPulse, HeartHandshake, Home, Pill, BookOpen, FileImage, Users, Package, Inbox, UserRound, ClipboardCheck, Utensils, Boxes, Activity, HandHeart, ShieldAlert, FileBarChart, Gauge, ListChecks, CalendarDays }
+// Admin only — a staff account must never even see the link, not just be
+// blocked by the backend (which independently enforces this too; see
+// roles_required("admin") on app/users/routes.py).
+const adminOnlyMenu = [
+  ['Admin & Staff Accounts', '/admin/users', 'KeyRound'],
+]
+const icons = { LayoutDashboard, Heart, HeartPulse, HeartHandshake, Home, Pill, FileImage, Users, Inbox, UserRound, ClipboardCheck, Utensils, Boxes, Activity, HandHeart, ShieldAlert, Gauge, ListChecks, CalendarDays, KeyRound }
 
 export default function Shell({ children }) {
   const navigate = useNavigate()
   const user = getStoredUser()
-  const menu = staffMenu
+  const menu = user?.role === 'admin' ? [...staffMenu, ...adminOnlyMenu] : staffMenu
   async function signOut() { await endSession(); navigate('/admin/login') }
   // No min-h, and items-start instead of grid's default align-items:
   // stretch — the sidebar's dark box must end at its own content (nav

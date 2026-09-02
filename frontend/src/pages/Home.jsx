@@ -1,5 +1,5 @@
 import React from 'react'
-import { ArrowRight, Heart, Users, HandHeart } from 'lucide-react'
+import { ArrowRight, Heart, Users, HandHeart, Link2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { programs } from '../data/siteData'
 import ProgramCard from '../components/ProgramCard'
@@ -41,7 +41,7 @@ export default function Home() {
     <section className="container-k py-20"><div className="grid gap-8 rounded-2xl bg-kTint p-6 md:grid-cols-[.9fr_1.1fr] md:p-10"><img className="h-[320px] w-full rounded-2xl object-cover" src="/images/social.jpg" alt="Older people sharing community time"/><div className="flex flex-col justify-center"><div className="section-kicker">Mary's Story</div><div className="mt-3 text-5xl leading-none text-kOrange">“</div><p className="mt-1 max-w-xl font-display text-2xl font-semibold leading-9 text-kGreen">Before joining the center, many days felt quiet. Now I have people to talk to, new things to learn and reasons to keep showing up.</p><div className="mt-5 text-sm font-bold text-kInk">Mary Akinyi, 72</div><div className="mt-4 flex gap-1">{Array.from({length:5}).map((_,i)=><span key={i} className="h-2 w-2 rounded-full bg-kOrange" />)}</div></div></div></section>
 
     <GalleryPreview />
-    {!teamLoading && !teamError && team.length > 0 && <section className="container-k pb-16"><div className="mb-8 text-center"><div className="eyebrow">The people behind the work</div><h2 className="mt-2 font-display text-3xl font-bold text-kGreen">Meet our team</h2></div><div className="grid gap-5 sm:grid-cols-3 lg:grid-cols-5">{team.map(member=><div key={member.id} className="overflow-hidden card-k text-center"><img src={member.image} alt={member.name} className="h-60 w-full object-cover"/><div className="p-5"><h3 className="font-display text-lg font-semibold text-kGreen">{member.name}</h3><p className="mt-1 text-sm text-kMuted">{member.role}</p></div></div>)}</div></section>}
+    {!teamLoading && !teamError && team.length > 0 && <section className="container-k pb-16"><div className="mb-10 text-center"><div className="eyebrow">The people behind the work</div><h2 className="mt-2 font-display text-3xl font-bold text-kGreen">Meet Our Team</h2></div><div className="mx-auto grid max-w-4xl grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-5">{team.map(member=><div key={member.id} className="text-center"><img src={member.image} alt={member.name} className="mx-auto h-28 w-28 rounded-full border-4 border-kBorderSoft object-cover shadow-soft dark:shadow-none sm:h-32 sm:w-32"/><h3 className="mt-4 font-display text-base font-semibold text-kGreen">{member.name}</h3><p className="mt-1 text-sm text-kMuted">{member.role}</p>{member.social_link && <a href={member.social_link} target="_blank" rel="noopener noreferrer" aria-label={`${member.name}'s social link`} className="mt-2 inline-flex text-kOrange hover:text-kGreen"><Link2 size={14}/></a>}</div>)}</div></section>}
     <CtaBanner />
   </div>
 }

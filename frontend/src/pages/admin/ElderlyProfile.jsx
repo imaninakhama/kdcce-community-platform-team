@@ -1,17 +1,24 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, ClipboardCheck, Heart, Pill, Utensils, Home, HandHeart, ShieldAlert, AlertTriangle, Camera } from 'lucide-react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { ArrowLeft, ClipboardCheck, Heart, Pill, Trash2, Utensils, ShieldAlert, AlertTriangle } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
-import { apiFetch } from '../../lib/api'
+import { apiFetch, getStoredUser } from '../../lib/api'
+
+// "home_visit" and "assistance" events are volunteer-duty/assignment
+// records (who was assigned, their status) — they belong on the
+// volunteer-assignment admin pages (Home Visits / Assistance Requests),
+// not here. This profile shows only elderly-related information, so
+// those two event types are filtered out of every timeline view below,
+// not just left off the tab list.
+const ELDERLY_EVENT_TYPES = ['attendance', 'health', 'medication', 'meal', 'incident']
 
 const TABS = [
   ['overview', 'Overview'], ['timeline', 'Timeline'], ['health', 'Health'], ['medication', 'Medication'],
-  ['attendance', 'Attendance'], ['meal', 'Meals'], ['home_visit', 'Visits'], ['assistance', 'Assistance'],
-  ['incident', 'Incidents'], ['followups', 'Follow-ups'],
+  ['attendance', 'Attendance'], ['meal', 'Meals'], ['incident', 'Incidents'], ['followups', 'Follow-ups'],
 ]
 
-const TYPE_ICONS = { attendance: ClipboardCheck, health: Heart, medication: Pill, meal: Utensils, home_visit: Home, assistance: HandHeart, incident: ShieldAlert }
+const TYPE_ICONS = { attendance: ClipboardCheck, health: Heart, medication: Pill, meal: Utensils, incident: ShieldAlert }
 const STATUS_STYLES = { Active: 'bg-kGreen/10 text-kGreen', Inactive: 'bg-kBorderSoft text-kMuted', Deceased: 'bg-kBorderSoft text-kMuted', Transferred: 'bg-kTint text-kOrange' }
 
 function fmtDay(iso) { return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) }
@@ -25,27 +32,28 @@ function TimelineEntry({ event }) {
     <div className="flex-1">
       <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-kInk">{event.title}</span><span className="text-xs text-kMuted">{fmtDay(event.timestamp)} &middot; {fmtTime(event.timestamp)}</span></div>
       <div className="mt-1 grid gap-0.5 text-sm text-kMuted">
-        {d.assigned_to && <div>Assigned: {d.assigned_to}</div>}
         {d.status && <div>Status: {d.status}</div>}
         {d.severity && <div>Severity: {d.severity}</div>}
-        {(d.observations || d.description || d.reason) && <div>{d.observations || d.description || d.reason}</div>}
+        {(d.observations || d.description) && <div>{d.observations || d.description}</div>}
         {d.medication_name && <div>{d.medication_name}{d.notes ? ` — ${d.notes}` : ''}</div>}
         {d.mood && <div>Mood: {d.mood}{d.temperature_celsius != null ? ` · ${d.temperature_celsius}°C` : ''}</div>}
         {d.follow_up_required && <div className="font-semibold text-kOrange">Follow-up required</div>}
-        {d.has_photo && <div className="flex items-center gap-1 text-kOrange"><Camera size={13} /> Photo attached</div>}
       </div>
     </div>
   </div>
 }
 
-export default function ElderlyProfile() {
+export default function ElderlyProfile({ showToast }) {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [member, setMember] = useState(null)
   const [timeline, setTimeline] = useState([])
   const [followups, setFollowups] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tab, setTab] = useState('overview')
+  const [deleting, setDeleting] = useState(false)
+  const isAdmin = getStoredUser()?.role === 'admin'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -56,13 +64,26 @@ export default function ElderlyProfile() {
         apiFetch(`/api/followups?elderly_member_id=${id}`),
       ])
       setMember(timelineRes.member)
-      setTimeline(timelineRes.timeline)
+      setTimeline(timelineRes.timeline.filter(e => ELDERLY_EVENT_TYPES.includes(e.type)))
       setFollowups(followupsRes.followups)
     } catch (err) { setError(errorMessage(err)) }
     finally { setLoading(false) }
   }, [id])
 
   useEffect(() => { load() }, [load])
+
+  async function remove() {
+    if (!window.confirm(`Permanently delete ${member.full_name}'s record? This action cannot be undone.`)) return
+    setDeleting(true)
+    try {
+      await apiFetch(`/api/elderly/${id}`, { method: 'DELETE' })
+      showToast(`${member.full_name}'s record deleted`)
+      navigate('/admin/elderly')
+    } catch (err) {
+      showToast(errorMessage(err))
+      setDeleting(false)
+    }
+  }
 
   if (loading) return <Shell><LoadingState label="profile" /></Shell>
   if (error) return <Shell><ErrorState message={error} onRetry={load} /></Shell>
@@ -81,6 +102,7 @@ export default function ElderlyProfile() {
       <div className="flex items-center gap-3">
         <span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLES[member.status]}`}>{member.status}</span>
         {openFollowups > 0 && <span className="flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700"><AlertTriangle size={13} /> {openFollowups} open follow-up{openFollowups > 1 ? 's' : ''}</span>}
+        {isAdmin && <button onClick={remove} disabled={deleting} className="flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60"><Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete member'}</button>}
       </div>
     </div>
 
