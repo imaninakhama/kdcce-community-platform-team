@@ -748,6 +748,11 @@ class Donation(db.Model):
     # own server-generated txn_id/receipt_id rather than overwriting them.
     mpesa_checkout_request_id = db.Column(db.String(50), unique=True)
     mpesa_receipt_number = db.Column(db.String(30))
+    # A user-friendly explanation of why an M-Pesa push resolved to Failed
+    # (cancelled, insufficient funds, timed out, ...) — see
+    # app/mpesa/service.py's FAILURE_REASONS. Null for anything that never
+    # failed via M-Pesa.
+    mpesa_failure_reason = db.Column(db.String(255))
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, index=True)
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
 
@@ -770,6 +775,7 @@ class Donation(db.Model):
             "txn_id": self.txn_id,
             "receipt_id": self.receipt_id,
             "mpesa_receipt_number": self.mpesa_receipt_number,
+            "mpesa_failure_reason": self.mpesa_failure_reason,
             "message": self.message,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),

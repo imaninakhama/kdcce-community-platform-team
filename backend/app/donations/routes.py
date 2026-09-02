@@ -115,12 +115,20 @@ def _create_mpesa_donation(data):
 def get_donation_status(donation_id):
     """Public and deliberately narrow — lets the donor's own browser poll
     for their M-Pesa result without exposing the admin-only full donation
-    record (get_donation below) to an unauthenticated caller."""
+    record (get_donation below) to an unauthenticated caller. Receipt-
+    identifying fields are only ever included once status is Paid — an
+    STK push having been sent is not a successful payment, and a Pending
+    or Failed donation must never give the frontend anything it could
+    use to render a receipt."""
     donation = get_or_404(Donation, donation_id)
-    return jsonify(
-        status=donation.status, receipt_id=donation.receipt_id, txn_id=donation.txn_id,
-        mpesa_receipt_number=donation.mpesa_receipt_number,
-    ), 200
+    body = {"status": donation.status}
+    if donation.status == "Paid":
+        body["receipt_id"] = donation.receipt_id
+        body["txn_id"] = donation.txn_id
+        body["mpesa_receipt_number"] = donation.mpesa_receipt_number
+    elif donation.status == "Failed":
+        body["failure_reason"] = donation.mpesa_failure_reason
+    return jsonify(**body), 200
 
 
 @bp.post("/api/admin/donations")

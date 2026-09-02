@@ -51,6 +51,25 @@ def normalize_phone(raw):
     return digits if re.match(r"^254[71]\d{8}$", digits) else None
 
 
+# Safaricom's own ResultDesc strings are inconsistent/technical ("DS
+# timeout user cannot be reached") — map the common ones to something a
+# donor can actually read. Falls back to a clean generic message for any
+# code not listed here, never the raw Safaricom text.
+FAILURE_REASONS = {
+    1: "There were insufficient funds to complete this payment.",
+    1001: "A payment is already being processed for this phone number. Please wait a moment and try again.",
+    1025: "The payment request could not be sent. Please try again.",
+    1032: "The payment request was cancelled.",
+    1037: "No response was received in time. Please try again.",
+    2001: "The PIN entered was incorrect.",
+}
+DEFAULT_FAILURE_REASON = "The payment could not be completed. Please try again."
+
+
+def _friendly_failure_reason(result_code):
+    return FAILURE_REASONS.get(result_code, DEFAULT_FAILURE_REASON)
+
+
 def _get_access_token():
     _require_config()
     try:
@@ -139,5 +158,6 @@ def process_callback(payload):
             donation.mpesa_receipt_number = str(receipt_number)
     else:
         donation.status = "Failed"
+        donation.mpesa_failure_reason = _friendly_failure_reason(stk.get("ResultCode"))
 
     db.session.commit()
