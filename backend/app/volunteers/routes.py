@@ -10,7 +10,7 @@ from ..models import AssistanceRequest, FollowUp, HomeVisit, VolunteerInvitation
 from ..notifications.service import notify
 from ..utils import get_or_404, issue_tokens, validation_error_response
 from .schemas import VolunteerSelfUpdateSchema, VolunteerStaffUpdateSchema
-from .service import send_rejected_email
+from .service import create_invitation, send_approved_email, send_rejected_email
 
 bp = Blueprint("volunteers", __name__, url_prefix="/api/volunteers")
 
@@ -225,15 +225,24 @@ def update_volunteer(volunteer_id):
         setattr(profile, field, value)
     db.session.commit()  # the decision itself is durably saved before anything email-related is even attempted
 
-    # Rejection email is a best-effort side effect of a decision that has
-    # ALREADY committed above — a failure here (network blip, bad
-    # provider key, Resend's unverified-domain restriction, whatever)
-    # must never look like it undid the rejection, and never rolls it
-    # back. There is deliberately no equivalent email/invitation trigger
-    # on approval — see app/volunteers/service.py::create_invitation for
-    # why that infrastructure still exists unused.
+    # Email is a best-effort side effect of a decision that has ALREADY
+    # committed above — a failure here (network blip, bad provider key,
+    # Resend's unverified-domain restriction, whatever) must never look
+    # like it undid the approval/rejection, and never rolls it back.
+    # Isolated in its own try/except with its own commit so an error
+    # from create_invitation itself can't take the status change down
+    # with it either.
     email_sent = None
-    if status_changed and new_status == "Rejected":
+    if status_changed and new_status == "Verified":
+        try:
+            invitation = create_invitation(profile)
+            email_sent = send_approved_email(profile.user, invitation)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            email_sent = False
+            current_app.logger.exception("Failed to send approval email to %s", profile.user.email)
+    elif status_changed and new_status == "Rejected":
         try:
             email_sent = send_rejected_email(profile.user, reason)
         except Exception:

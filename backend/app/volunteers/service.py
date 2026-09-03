@@ -1,6 +1,8 @@
 import secrets
 from datetime import timedelta
 
+from flask import current_app
+
 from ..email.service import send_email
 from ..extensions import db
 from ..models import VolunteerInvitation, utcnow
@@ -30,18 +32,9 @@ def send_application_received_email(user):
 
 
 def create_invitation(profile):
-    """Issues a token-based invitation for a volunteer profile — does not
-    commit; a caller commits it together with whatever else it's doing
-    in the same request, same convention as notifications.service.notify.
-
-    Not currently called anywhere (the approval flow that used to invoke
-    this alongside an approval email was removed — see
-    app/volunteers/routes.py::update_volunteer). Kept, along with the
-    VolunteerInvitation model and the GET/POST /invitations/<token>[/accept]
-    routes, as working invitation infrastructure: still fully functional
-    and covered by tests (see test_volunteer_invitations.py), just not
-    wired to any trigger right now. Call this directly (then commit) to
-    hand a volunteer a working invitation link."""
+    """One new token per approval — does not commit; the caller's route
+    (the same one that just changed the profile's status) commits it all
+    together, same convention as notifications.service.notify."""
     invitation = VolunteerInvitation(
         volunteer_profile_id=profile.id,
         token=secrets.token_urlsafe(32),
@@ -50,6 +43,29 @@ def create_invitation(profile):
     db.session.add(invitation)
     db.session.flush()  # assigns invitation.id without committing yet
     return invitation
+
+
+def send_approved_email(user, invitation):
+    """Returns whether the send succeeded — the caller (update_volunteer)
+    reports this back to the admin, since the approval itself is already
+    saved by the time this runs and a failure here must never look like
+    it undid that."""
+    link = f"{current_app.config['FRONTEND_URL']}/volunteer/invitation/{invitation.token}"
+    return send_email(
+        user.email,
+        "You're approved to volunteer with KDCCE!",
+        (
+            f"Hi {user.name},\n\n"
+            "Good news — your KDCCE volunteer application has been approved.\n\n"
+            "To get straight into your volunteer portal, open this link:\n\n"
+            f"{link}\n\n"
+            "This link is valid for 7 days. If it has expired by the time you open it, "
+            "you can still sign in any time with the email and password you registered "
+            "with — nothing about your account has changed.\n\n"
+            "Welcome to the team!\n\n"
+            "— The KDCCE Team"
+        ),
+    )
 
 
 def send_rejected_email(user, reason):
