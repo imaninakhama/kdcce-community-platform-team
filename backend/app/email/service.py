@@ -12,10 +12,12 @@ def send_email(to_email, subject, body):
     configured, a network error, a bad key/login, a bad recipient — is
     caught here and turned into a log line, never an exception, so a
     flaky (or unconfigured, in local dev) mail provider can never break
-    the registration/approval/rejection action that triggered the send.
-    Plain text only. Returns True/False only for tests/logging — callers
-    must not branch on it to decide whether the triggering action
-    succeeded; it already has.
+    the registration/rejection action that triggered the send — that
+    action has already succeeded and is never rolled back over a mail
+    failure. Plain text only. Returns True/False so a caller MAY report
+    delivery status back to the user (e.g. "rejected, but the email
+    couldn't be sent"), without ever using it to gate or undo the
+    triggering action itself.
 
     Tries Resend's REST API first (RESEND_API_KEY) — the project's
     preferred provider, via `requests`, already a dependency for the
