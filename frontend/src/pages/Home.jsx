@@ -7,6 +7,7 @@ import Stats from '../components/Stats'
 import GalleryPreview from '../components/GalleryPreview'
 import VideoShowcase from '../components/VideoShowcase'
 import CtaBanner from '../components/CtaBanner'
+import ImpactStoriesSection from '../components/ImpactStoriesSection'
 import { useApiList } from '../lib/useApiList'
 
 export default function Home() {
@@ -42,6 +43,7 @@ export default function Home() {
 
     <GalleryPreview />
     {!teamLoading && !teamError && team.length > 0 && <section className="container-k pb-16"><div className="mb-10 text-center"><div className="eyebrow">The people behind the work</div><h2 className="mt-2 font-display text-3xl font-bold text-kGreen">Meet Our Team</h2></div><div className="mx-auto grid max-w-4xl grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-5">{team.map(member=><div key={member.id} className="text-center"><img src={member.image} alt={member.name} className="mx-auto h-28 w-28 rounded-full border-4 border-kBorderSoft object-cover shadow-soft dark:shadow-none sm:h-32 sm:w-32"/><h3 className="mt-4 font-display text-base font-semibold text-kGreen">{member.name}</h3><p className="mt-1 text-sm text-kMuted">{member.role}</p>{member.social_link && <a href={member.social_link} target="_blank" rel="noopener noreferrer" aria-label={`${member.name}'s social link`} className="mt-2 inline-flex text-kOrange hover:text-kGreen"><Link2 size={14}/></a>}</div>)}</div></section>}
+    <ImpactStoriesSection />
     <CtaBanner />
   </div>
 }
