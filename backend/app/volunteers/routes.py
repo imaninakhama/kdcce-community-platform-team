@@ -10,7 +10,7 @@ from ..models import AssistanceRequest, FollowUp, HomeVisit, VolunteerInvitation
 from ..notifications.service import notify
 from ..utils import get_or_404, issue_tokens, validation_error_response
 from .schemas import VolunteerSelfUpdateSchema, VolunteerStaffUpdateSchema
-from .service import create_invitation, send_approved_email, send_rejected_email
+from .service import send_rejected_email
 
 bp = Blueprint("volunteers", __name__, url_prefix="/api/volunteers")
 
@@ -187,26 +187,25 @@ def update_volunteer(volunteer_id):
     except ValidationError as err:
         return validation_error_response(err)
 
-    if "status" in data and data["status"] != profile.status:
+    # Comparing against the CURRENT status (before any field is applied
+    # below) is what makes this safe to call repeatedly: re-opening or
+    # re-saving an already-Verified/Rejected volunteer with the same
+    # status is a no-op here, so it can never re-send an approval or
+    # rejection email that already went out.
+    status_changed = "status" in data and data["status"] != profile.status
+    new_status = data.get("status")
+    reason = data.get("rejection_reason")
+
+    if status_changed:
         profile.reviewed_by_id = int(get_jwt_identity())
         profile.reviewed_at = utcnow()
-        if data["status"] == "Verified":
+        if new_status == "Verified":
             notify(
                 profile.user_id, "Volunteer Verified", "You're verified!",
                 "Your volunteer application has been verified. You can now be assigned to home visits and assistance requests.",
                 related_resource_type="volunteer_profile", related_resource_id=profile.id,
             )
-            invitation = create_invitation(profile)
-            try:
-                send_approved_email(profile.user, invitation)
-            except Exception:
-                # The approval itself (the status change below + commit)
-                # must never be lost over a flaky mail server — an admin
-                # can always re-send by flipping the status back and
-                # forward again if a volunteer says they never got it.
-                current_app.logger.exception("Failed to send approval email to %s", profile.user.email)
-        elif data["status"] == "Rejected":
-            reason = data.get("rejection_reason")
+        elif new_status == "Rejected":
             message = "Your KDCCE volunteer application was not approved."
             if reason:
                 message += f" Reason: {reason}"
@@ -215,11 +214,7 @@ def update_volunteer(volunteer_id):
                 message,
                 related_resource_type="volunteer_profile", related_resource_id=profile.id,
             )
-            try:
-                send_rejected_email(profile.user, reason)
-            except Exception:
-                current_app.logger.exception("Failed to send rejection email to %s", profile.user.email)
-        if data["status"] != "Rejected":
+        if new_status != "Rejected":
             # A reason only ever makes sense attached to the rejection it
             # explains — clear any stale one left over from an earlier
             # rejection that was later reversed, so it can't resurface
@@ -228,8 +223,26 @@ def update_volunteer(volunteer_id):
 
     for field, value in data.items():
         setattr(profile, field, value)
-    db.session.commit()
-    return jsonify(volunteer=profile.to_dict()), 200
+    db.session.commit()  # the decision itself is durably saved before anything email-related is even attempted
+
+    # Rejection email is a best-effort side effect of a decision that has
+    # ALREADY committed above — a failure here (network blip, bad
+    # provider key, Resend's unverified-domain restriction, whatever)
+    # must never look like it undid the rejection, and never rolls it
+    # back. There is deliberately no equivalent email/invitation trigger
+    # on approval — see app/volunteers/service.py::create_invitation for
+    # why that infrastructure still exists unused.
+    email_sent = None
+    if status_changed and new_status == "Rejected":
+        try:
+            email_sent = send_rejected_email(profile.user, reason)
+        except Exception:
+            email_sent = False
+            current_app.logger.exception("Failed to send rejection email to %s", profile.user.email)
+
+    body = profile.to_dict()
+    body["email_sent"] = email_sent
+    return jsonify(volunteer=body), 200
 
 
 # ---------- Invitation acceptance ----------
