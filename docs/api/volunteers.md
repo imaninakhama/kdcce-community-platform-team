@@ -30,6 +30,9 @@ Volunteer profile object:
   "phone": "0712345678", "skills": "Cooking, first aid", "availability": "Weekday mornings",
   "areas_of_interest": "Home visits, feeding program", "experience": "Two years at a local shelter",
   "motivation": "I want to give back", "bio": "Retired nurse, lives in Kibera.",
+  "date_of_birth": "1990-04-12", "county": "Kisumu", "min_hours_available": 4,
+  "emergency_contact_name": "John Mwangi", "emergency_contact_phone": "0722334455",
+  "code_of_conduct_agreed": true, "privacy_consent_agreed": true, "accuracy_declaration_agreed": true,
   "status": "Verified", "rejection_reason": null,
   "reviewed_by": "Jane Staffer", "reviewed_at": "2026-08-24T10:00:00+00:00",
   "created_at": "...", "updated_at": "..."
@@ -57,7 +60,10 @@ application status and their approval/rejection notification.
 
 ### PATCH /api/volunteers/me
 - **Auth:** any valid token with a profile. Used both for the initial application (immediately after registration) and for later self-service edits — same fields either way.
-- **Request:** any subset of `{ "phone", "skills", "availability", "areas_of_interest", "experience", "motivation", "bio" }` (all optional strings) — **`status` and `rejection_reason` are not accepted here**, sending either is rejected as an unknown field (`400`), which also means a payload mixing a legitimate field with `status` 400s as a whole rather than silently applying the legitimate part. Omitted fields are left unchanged, never reset.
+- **Request:** any subset of `{ "phone", "skills", "availability", "areas_of_interest", "experience", "motivation", "bio", "date_of_birth", "county", "min_hours_available", "emergency_contact_name", "emergency_contact_phone", "code_of_conduct_agreed", "privacy_consent_agreed", "accuracy_declaration_agreed" }` — **`status` and `rejection_reason` are not accepted here**, sending either is rejected as an unknown field (`400`), which also means a payload mixing a legitimate field with `status` 400s as a whole rather than silently applying the legitimate part. Omitted fields are left unchanged, never reset.
+  - `date_of_birth` (`YYYY-MM-DD`): rejected (`400`) if in the future or if it makes the applicant under 18 as of today.
+  - `min_hours_available`: must be a positive integer (`>= 1`).
+  - `code_of_conduct_agreed`, `privacy_consent_agreed`, `accuracy_declaration_agreed`: booleans that may only be sent as `true` — sending `false` explicitly is rejected (`400`) so a crafted payload can never "unagree" someone; omit the field to leave it unchanged.
 - **Response `200`:** `{ "volunteer": { ... } }`. Errors: `400`, `401`, `404`.
 
 ## Staff management
