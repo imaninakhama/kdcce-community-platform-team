@@ -15,6 +15,7 @@ import AdminLogin from './pages/AdminLogin'
 import AdminDashboard from './pages/AdminDashboard'
 import VolunteerPortal from './pages/VolunteerPortal'
 import VolunteerInvitation from './pages/VolunteerInvitation'
+import VolunteerSignUp from './pages/VolunteerSignUp'
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation()
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/*" element={<AdminDashboard />} />
         <Route path="/volunteer/invitation/:token" element={<VolunteerInvitation />} />
+        <Route path="/volunteer/signup" element={<VolunteerSignUp />} />
         <Route path="/volunteer/*" element={<VolunteerPortal />} />
       </Routes>
     </main>

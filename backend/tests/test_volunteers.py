@@ -1,3 +1,6 @@
+from datetime import date, timedelta
+
+
 def test_new_volunteer_has_a_pending_profile(client, make_user, auth_header):
     _, access_token, _ = make_user(email="vol1@example.com")
     resp = client.get("/api/volunteers/me", headers=auth_header(access_token))
@@ -89,6 +92,100 @@ def test_applicant_cannot_approve_self_via_crafted_payload(client, make_user, au
     assert resp.status_code == 400
     profile = client.get("/api/volunteers/me", headers=auth_header(access_token)).get_json()["volunteer"]
     assert profile["status"] == "Pending"
+
+
+# ---------- New application fields: dob, county, hours, emergency contact, consents ----------
+
+def _dob_years_ago(years):
+    today = date.today()
+    try:
+        return today.replace(year=today.year - years)
+    except ValueError:
+        # today is Feb 29 and (today.year - years) isn't a leap year
+        return today.replace(month=2, day=28, year=today.year - years)
+
+
+def test_volunteer_can_submit_full_application_with_new_fields(client, make_user, auth_header):
+    _, access_token, _ = make_user(email="applicant4@example.com")
+    dob = _dob_years_ago(25)
+    resp = client.patch(
+        "/api/volunteers/me",
+        json={
+            "phone": "0712345678",
+            "skills": "First aid",
+            "availability": "Weekends",
+            "areas_of_interest": "Home visits",
+            "experience": "Two years",
+            "motivation": "I want to give back",
+            "date_of_birth": dob.isoformat(),
+            "county": "Kisumu",
+            "min_hours_available": 4,
+            "emergency_contact_name": "John Mwangi",
+            "emergency_contact_phone": "0722334455",
+            "code_of_conduct_agreed": True,
+            "privacy_consent_agreed": True,
+            "accuracy_declaration_agreed": True,
+        },
+        headers=auth_header(access_token),
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()["volunteer"]
+    assert body["date_of_birth"] == dob.isoformat()
+    assert body["county"] == "Kisumu"
+    assert body["min_hours_available"] == 4
+    assert body["emergency_contact_name"] == "John Mwangi"
+    assert body["emergency_contact_phone"] == "0722334455"
+    assert body["code_of_conduct_agreed"] is True
+    assert body["privacy_consent_agreed"] is True
+    assert body["accuracy_declaration_agreed"] is True
+
+
+def test_underage_date_of_birth_is_rejected(client, make_user, auth_header):
+    _, access_token, _ = make_user(email="applicant5@example.com")
+    dob = _dob_years_ago(17)
+    resp = client.patch("/api/volunteers/me", json={"date_of_birth": dob.isoformat()}, headers=auth_header(access_token))
+    assert resp.status_code == 400
+
+
+def test_future_date_of_birth_is_rejected(client, make_user, auth_header):
+    _, access_token, _ = make_user(email="applicant6@example.com")
+    future = (date.today() + timedelta(days=1)).isoformat()
+    resp = client.patch("/api/volunteers/me", json={"date_of_birth": future}, headers=auth_header(access_token))
+    assert resp.status_code == 400
+
+
+def test_exactly_18_years_old_is_accepted(client, make_user, auth_header):
+    _, access_token, _ = make_user(email="applicant7@example.com")
+    dob = _dob_years_ago(18)
+    resp = client.patch("/api/volunteers/me", json={"date_of_birth": dob.isoformat()}, headers=auth_header(access_token))
+    assert resp.status_code == 200
+    assert resp.get_json()["volunteer"]["date_of_birth"] == dob.isoformat()
+
+
+def test_min_hours_available_must_be_a_positive_integer(client, make_user, auth_header):
+    _, access_token, _ = make_user(email="applicant8@example.com")
+    zero = client.patch("/api/volunteers/me", json={"min_hours_available": 0}, headers=auth_header(access_token))
+    assert zero.status_code == 400
+    negative = client.patch("/api/volunteers/me", json={"min_hours_available": -3}, headers=auth_header(access_token))
+    assert negative.status_code == 400
+    positive = client.patch("/api/volunteers/me", json={"min_hours_available": 5}, headers=auth_header(access_token))
+    assert positive.status_code == 200
+    assert positive.get_json()["volunteer"]["min_hours_available"] == 5
+
+
+def test_consent_booleans_reject_explicit_false(client, make_user, auth_header):
+    _, access_token, _ = make_user(email="applicant9@example.com")
+    resp = client.patch("/api/volunteers/me", json={"code_of_conduct_agreed": False}, headers=auth_header(access_token))
+    assert resp.status_code == 400
+    resp = client.patch("/api/volunteers/me", json={"privacy_consent_agreed": False}, headers=auth_header(access_token))
+    assert resp.status_code == 400
+    resp = client.patch("/api/volunteers/me", json={"accuracy_declaration_agreed": False}, headers=auth_header(access_token))
+    assert resp.status_code == 400
+    # Untouched fields default to False and stay False when never agreed to
+    profile = client.get("/api/volunteers/me", headers=auth_header(access_token)).get_json()["volunteer"]
+    assert profile["code_of_conduct_agreed"] is False
+    assert profile["privacy_consent_agreed"] is False
+    assert profile["accuracy_declaration_agreed"] is False
 
 
 # ---------- Staff management ----------

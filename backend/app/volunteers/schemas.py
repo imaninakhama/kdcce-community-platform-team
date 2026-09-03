@@ -1,6 +1,17 @@
-from marshmallow import Schema, fields, validate
+from datetime import date
+
+from marshmallow import Schema, fields, validate, ValidationError
 
 from ..models import VOLUNTEER_STATUSES
+
+
+def _not_under_18_or_future(value):
+    today = date.today()
+    if value > today:
+        raise ValidationError("Date of birth cannot be in the future.")
+    age = today.year - value.year - ((today.month, today.day) < (value.month, value.day))
+    if age < 18:
+        raise ValidationError("You must be at least 18 years old to apply.")
 
 
 class VolunteerSelfUpdateSchema(Schema):
@@ -16,6 +27,19 @@ class VolunteerSelfUpdateSchema(Schema):
     experience = fields.String(allow_none=True, validate=validate.Length(max=2000))
     motivation = fields.String(allow_none=True, validate=validate.Length(max=2000))
     bio = fields.String(allow_none=True, validate=validate.Length(max=2000))
+    date_of_birth = fields.Date(allow_none=True, validate=_not_under_18_or_future)
+    county = fields.String(allow_none=True, validate=validate.Length(max=80))
+    min_hours_available = fields.Integer(allow_none=True, validate=validate.Range(min=1))
+    emergency_contact_name = fields.String(allow_none=True, validate=validate.Length(max=120))
+    emergency_contact_phone = fields.String(allow_none=True, validate=validate.Length(max=40))
+    # These three consent flags may only ever be set to True by a
+    # self-update — validate.Equal(True) rejects an explicit False in the
+    # payload (a crafted request can't "unagree" someone), while omitting
+    # the field entirely (this schema is always loaded with partial=True)
+    # leaves the existing value untouched.
+    code_of_conduct_agreed = fields.Boolean(allow_none=False, validate=validate.Equal(True))
+    privacy_consent_agreed = fields.Boolean(allow_none=False, validate=validate.Equal(True))
+    accuracy_declaration_agreed = fields.Boolean(allow_none=False, validate=validate.Equal(True))
 
 
 class VolunteerStaffUpdateSchema(VolunteerSelfUpdateSchema):

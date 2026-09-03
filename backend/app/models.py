@@ -169,6 +169,14 @@ class VolunteerProfile(db.Model):
     experience = db.Column(db.Text)
     motivation = db.Column(db.Text)
     bio = db.Column(db.Text)
+    date_of_birth = db.Column(db.Date)
+    county = db.Column(db.String(80))
+    min_hours_available = db.Column(db.Integer)
+    emergency_contact_name = db.Column(db.String(120))
+    emergency_contact_phone = db.Column(db.String(40))
+    code_of_conduct_agreed = db.Column(db.Boolean, nullable=False, default=False)
+    privacy_consent_agreed = db.Column(db.Boolean, nullable=False, default=False)
+    accuracy_declaration_agreed = db.Column(db.Boolean, nullable=False, default=False)
     status = db.Column(db.String(20), nullable=False, default="Pending")
     rejection_reason = db.Column(db.Text)
     reviewed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
@@ -192,6 +200,14 @@ class VolunteerProfile(db.Model):
             "experience": self.experience,
             "motivation": self.motivation,
             "bio": self.bio,
+            "date_of_birth": self.date_of_birth.isoformat() if self.date_of_birth else None,
+            "county": self.county,
+            "min_hours_available": self.min_hours_available,
+            "emergency_contact_name": self.emergency_contact_name,
+            "emergency_contact_phone": self.emergency_contact_phone,
+            "code_of_conduct_agreed": self.code_of_conduct_agreed,
+            "privacy_consent_agreed": self.privacy_consent_agreed,
+            "accuracy_declaration_agreed": self.accuracy_declaration_agreed,
             "status": self.status,
             "rejection_reason": self.rejection_reason,
             "reviewed_by": self.reviewed_by.name if self.reviewed_by else None,
