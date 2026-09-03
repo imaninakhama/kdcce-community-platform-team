@@ -2,27 +2,61 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from app.extensions import db
-from app.models import VolunteerInvitation, VolunteerProfile, utcnow
-from app.volunteers.service import create_invitation
+from app.models import VolunteerInvitation, utcnow
+
+
+def _get_invitation(app, volunteer_id):
+    """Reads the invitation token straight from the database, the same
+    way it would only ever reach a real volunteer — through the approval
+    email, never an API response (the token is never returned to any
+    authenticated caller, including the admin who approved them)."""
+    with app.app_context():
+        row = VolunteerInvitation.query.filter_by(volunteer_profile_id=volunteer_id).order_by(VolunteerInvitation.id.desc()).first()
+        return row.token if row else None
 
 
 def _approve(client, auth_header, admin_token, volunteer_id):
     return client.patch(f"/api/volunteers/{volunteer_id}", json={"status": "Verified"}, headers=auth_header(admin_token))
 
 
-def _make_invitation(app, volunteer_id):
-    """Invitation creation is no longer triggered by approval (see
-    app/volunteers/routes.py::update_volunteer) — these tests exercise
-    the invitation-acceptance flow itself, which is still fully working
-    infrastructure, by creating a token directly via the still-present
-    create_invitation() service function, the same way any future
-    trigger would."""
+def test_approving_a_volunteer_creates_an_invitation(client, app, make_user, make_staff_user, auth_header):
+    make_user(email="invitee1@example.com")
+    _, admin_token = make_staff_user("admin")
+    volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
+
+    resp = _approve(client, auth_header, admin_token, volunteer_id)
+    assert resp.status_code == 200
+    assert _get_invitation(app, volunteer_id) is not None
+
+
+def test_rejecting_a_volunteer_creates_no_invitation(client, app, make_user, make_staff_user, auth_header):
+    make_user(email="invitee2@example.com")
+    _, admin_token = make_staff_user("admin")
+    volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
+
+    client.patch(f"/api/volunteers/{volunteer_id}", json={"status": "Rejected"}, headers=auth_header(admin_token))
+    assert _get_invitation(app, volunteer_id) is None
+
+
+def test_reapproving_creates_a_second_invitation_not_a_duplicate_send(client, app, make_user, make_staff_user, auth_header):
+    """Approve -> reject -> approve again: exactly two invitations exist
+    (one per Verified transition), and only the newest one is still
+    valid — this is the "don't send duplicate emails on an unchanged
+    status" guarantee, expressed the only way a test can observe it
+    black-box (repeat PATCHes to the same status create nothing new;
+    see test_status_persists_across_partial_edit_by_staff in
+    test_volunteers.py for that half)."""
+    make_user(email="invitee3@example.com")
+    _, admin_token = make_staff_user("admin")
+    volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
+
+    _approve(client, auth_header, admin_token, volunteer_id)
+    client.patch(f"/api/volunteers/{volunteer_id}", json={"status": "Rejected"}, headers=auth_header(admin_token))
+    _approve(client, auth_header, admin_token, volunteer_id)
+
     with app.app_context():
-        profile = db.session.get(VolunteerProfile, volunteer_id)
-        invitation = create_invitation(profile)
-        token = invitation.token
-        db.session.commit()
-        return token
+        count = VolunteerInvitation.query.filter_by(volunteer_profile_id=volunteer_id).count()
+    assert count == 2
 
 
 def test_volunteer_can_accept_a_valid_invitation(client, app, make_user, make_staff_user, auth_header):
@@ -30,7 +64,7 @@ def test_volunteer_can_accept_a_valid_invitation(client, app, make_user, make_st
     _, admin_token = make_staff_user("admin")
     volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
     _approve(client, auth_header, admin_token, volunteer_id)
-    token = _make_invitation(app, volunteer_id)
+    token = _get_invitation(app, volunteer_id)
 
     preview = client.get(f"/api/volunteers/invitations/{token}")
     assert preview.status_code == 200
@@ -54,7 +88,7 @@ def test_accepting_an_invitation_twice_fails_the_second_time(client, app, make_u
     _, admin_token = make_staff_user("admin")
     volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
     _approve(client, auth_header, admin_token, volunteer_id)
-    token = _make_invitation(app, volunteer_id)
+    token = _get_invitation(app, volunteer_id)
 
     first = client.post(f"/api/volunteers/invitations/{token}/accept")
     assert first.status_code == 200
@@ -77,7 +111,7 @@ def test_expired_invitation_is_rejected_with_friendly_message(client, app, make_
     _, admin_token = make_staff_user("admin")
     volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
     _approve(client, auth_header, admin_token, volunteer_id)
-    token = _make_invitation(app, volunteer_id)
+    token = _get_invitation(app, volunteer_id)
 
     with app.app_context():
         row = VolunteerInvitation.query.filter_by(token=token).first()
@@ -109,20 +143,18 @@ def test_registration_sends_application_received_email(client):
     assert user.email == "applicant@example.com"
 
 
-def test_approving_a_volunteer_sends_no_email(client, make_user, make_staff_user, auth_header):
-    """Approval intentionally sends no email — see
-    app/volunteers/routes.py::update_volunteer. Only an in-app
-    notification fires; there is no email function to even patch here
-    anymore (send_approved_email was removed, not just left unused)."""
+def test_approval_sends_approved_email_with_the_new_invitation(client, make_user, make_staff_user, auth_header):
     make_user(email="invitee8@example.com")
     _, admin_token = make_staff_user("admin")
     volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
 
-    resp = _approve(client, auth_header, admin_token, volunteer_id)
+    with patch("app.volunteers.routes.send_approved_email", return_value=True) as mock_send:
+        resp = _approve(client, auth_header, admin_token, volunteer_id)
     assert resp.status_code == 200
-    body = resp.get_json()["volunteer"]
-    assert body["status"] == "Verified"
-    assert body["email_sent"] is None  # no attempt was made, not "attempted and failed"
+    mock_send.assert_called_once()
+    (user, invitation), _ = mock_send.call_args
+    assert user.email == "invitee8@example.com"
+    assert invitation.token
 
 
 def test_rejection_sends_rejected_email_with_the_given_reason(client, make_user, make_staff_user, auth_header):
@@ -143,7 +175,7 @@ def test_rejection_sends_rejected_email_with_the_given_reason(client, make_user,
     assert reason == "We need volunteers in a different area right now."
 
 
-def test_unchanged_status_sends_no_rejection_email(client, make_user, make_staff_user, auth_header):
+def test_unchanged_status_sends_no_email(client, make_user, make_staff_user, auth_header):
     """PATCHing other fields (or the same status again) is not a status
     *change* — no repeat email for something that didn't happen again."""
     make_user(email="invitee10@example.com")
@@ -151,9 +183,11 @@ def test_unchanged_status_sends_no_rejection_email(client, make_user, make_staff
     volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
     _approve(client, auth_header, admin_token, volunteer_id)
 
-    with patch("app.volunteers.routes.send_rejected_email") as mock_rejected:
+    with patch("app.volunteers.routes.send_approved_email") as mock_approved, \
+         patch("app.volunteers.routes.send_rejected_email") as mock_rejected:
         resp = client.patch(f"/api/volunteers/{volunteer_id}", json={"status": "Verified", "phone": "0712345678"}, headers=auth_header(admin_token))
     assert resp.status_code == 200
+    mock_approved.assert_not_called()
     mock_rejected.assert_not_called()
 
 
@@ -168,6 +202,47 @@ def test_registration_succeeds_even_if_the_email_send_blows_up(client):
     assert resp.get_json()["user"]["email"] == "resilient@example.com"
 
 
+def test_approval_succeeds_even_if_the_email_send_blows_up(client, make_user, make_staff_user, auth_header):
+    make_user(email="invitee11@example.com")
+    _, admin_token = make_staff_user("admin")
+    volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
+
+    with patch("app.volunteers.routes.send_approved_email", side_effect=RuntimeError("mail server on fire")):
+        resp = _approve(client, auth_header, admin_token, volunteer_id)
+    assert resp.status_code == 200
+    assert resp.get_json()["volunteer"]["status"] == "Verified"
+
+
+def test_approval_response_reports_email_sent_true_on_success(client, make_user, make_staff_user, auth_header):
+    make_user(email="invitee-email-status-ok@example.com")
+    _, admin_token = make_staff_user("admin")
+    volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
+
+    with patch("app.volunteers.routes.send_approved_email", return_value=True):
+        resp = _approve(client, auth_header, admin_token, volunteer_id)
+    assert resp.status_code == 200
+    body = resp.get_json()["volunteer"]
+    assert body["status"] == "Verified"
+    assert body["email_sent"] is True
+
+
+def test_approval_response_reports_email_sent_false_when_provider_fails(client, make_user, make_staff_user, auth_header):
+    """send_email itself never raises (see app/email/service.py) — a
+    provider failure surfaces as a False return, not an exception. The
+    admin must be told the approval went through but the email did not,
+    not just see a generic success."""
+    make_user(email="invitee-email-status-fail@example.com")
+    _, admin_token = make_staff_user("admin")
+    volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
+
+    with patch("app.volunteers.routes.send_approved_email", return_value=False):
+        resp = _approve(client, auth_header, admin_token, volunteer_id)
+    assert resp.status_code == 200
+    body = resp.get_json()["volunteer"]
+    assert body["status"] == "Verified"  # the approval itself is NOT undone
+    assert body["email_sent"] is False
+
+
 def test_rejection_response_reports_email_sent_status(client, make_user, make_staff_user, auth_header):
     make_user(email="invitee-reject-email-status@example.com")
     _, admin_token = make_staff_user("admin")
@@ -177,27 +252,46 @@ def test_rejection_response_reports_email_sent_status(client, make_user, make_st
         resp = client.patch(f"/api/volunteers/{volunteer_id}", json={"status": "Rejected"}, headers=auth_header(admin_token))
     assert resp.status_code == 200
     body = resp.get_json()["volunteer"]
-    assert body["status"] == "Rejected"  # the rejection itself is NOT undone by a mail failure
+    assert body["status"] == "Rejected"
     assert body["email_sent"] is False
 
 
-def test_rejection_succeeds_even_if_the_email_send_blows_up(client, make_user, make_staff_user, auth_header):
-    make_user(email="invitee11@example.com")
+def test_unchanged_status_reports_no_email_attempt(client, make_user, make_staff_user, auth_header):
+    make_user(email="invitee-no-attempt@example.com")
+    _, admin_token = make_staff_user("admin")
+    volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
+    _approve(client, auth_header, admin_token, volunteer_id)
+
+    resp = client.patch(f"/api/volunteers/{volunteer_id}", json={"status": "Verified", "phone": "0712345678"}, headers=auth_header(admin_token))
+    assert resp.status_code == 200
+    assert resp.get_json()["volunteer"]["email_sent"] is None
+
+
+def test_approval_is_saved_even_if_creating_the_invitation_itself_blows_up(client, make_user, make_staff_user, auth_header):
+    """Regression: the invitation used to be created OUTSIDE any
+    try/except and BEFORE the status change was committed — a failure
+    there (not just in send_approved_email) would 500 the whole request
+    and lose the approval entirely, not just fail to send the email."""
+    make_user(email="invitee-invitation-blows-up@example.com")
     _, admin_token = make_staff_user("admin")
     volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]
 
-    with patch("app.volunteers.routes.send_rejected_email", side_effect=RuntimeError("mail server on fire")):
-        resp = client.patch(f"/api/volunteers/{volunteer_id}", json={"status": "Rejected"}, headers=auth_header(admin_token))
+    with patch("app.volunteers.routes.create_invitation", side_effect=RuntimeError("db is on fire")):
+        resp = _approve(client, auth_header, admin_token, volunteer_id)
     assert resp.status_code == 200
     body = resp.get_json()["volunteer"]
-    assert body["status"] == "Rejected"
+    assert body["status"] == "Verified"
     assert body["email_sent"] is False
+
+    # And it's durably saved — not just present in this one response.
+    refetched = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"]
+    assert next(v for v in refetched if v["id"] == volunteer_id)["status"] == "Verified"
 
 
 def test_expired_invitation_link_does_not_block_normal_login(client, app, make_user, make_staff_user, auth_header):
     """An invitation is a convenience, never a gate — a Verified
     volunteer can already sign in with their own password regardless of
-    whether one was ever issued to them."""
+    whether they ever open the link, expired or not."""
     make_user(email="invitee7@example.com", password="RealPassword1!")
     _, admin_token = make_staff_user("admin")
     volunteer_id = client.get("/api/volunteers", headers=auth_header(admin_token)).get_json()["volunteers"][0]["id"]

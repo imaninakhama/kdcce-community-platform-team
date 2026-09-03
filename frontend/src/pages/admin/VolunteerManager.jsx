@@ -25,8 +25,10 @@ function ReviewModal({ volunteer, onClose, onDecide, showToast }) {
     if (!window.confirm(`Approve ${volunteer.name} as a volunteer? They will immediately gain access to the volunteer portal.`)) return
     setSaving(true)
     try {
-      await onDecide(volunteer.id, { status: 'Verified' })
-      showToast(`${volunteer.name} approved`)
+      const updated = await onDecide(volunteer.id, { status: 'Verified' })
+      showToast(updated.email_sent === false
+        ? `${volunteer.name} approved — but the invitation email could not be sent`
+        : `${volunteer.name} approved and emailed`)
       onClose()
     } catch (err) { showToast(errorMessage(err)) }
     finally { setSaving(false) }
@@ -68,18 +70,7 @@ function ReviewModal({ volunteer, onClose, onDecide, showToast }) {
         </>}
       </div>}
 
-      {volunteer.status !== 'Pending' && <div className="mt-2 border-t border-kBorderSoft pt-5"><button disabled={saving} onClick={() => {
-        const goingToRejected = volunteer.status === 'Verified'
-        onDecide(volunteer.id, { status: goingToRejected ? 'Rejected' : 'Verified' })
-          .then(updated => {
-            // Only the Rejected direction sends an email — approval has none.
-            showToast(goingToRejected
-              ? (updated.email_sent === false ? 'Status updated — but the email could not be sent' : 'Status updated and emailed')
-              : 'Status updated')
-            onClose()
-          })
-          .catch(err => showToast(errorMessage(err)))
-      }} className="text-sm font-semibold text-kOrange">{volunteer.status === 'Verified' ? 'Revoke verification' : 'Verify instead'}</button></div>}
+      {volunteer.status !== 'Pending' && <div className="mt-2 border-t border-kBorderSoft pt-5"><button disabled={saving} onClick={() => onDecide(volunteer.id, { status: volunteer.status === 'Verified' ? 'Rejected' : 'Verified' }).then(updated => { showToast(updated.email_sent === false ? 'Status updated — but the email could not be sent' : 'Status updated and emailed'); onClose() }).catch(err => showToast(errorMessage(err)))} className="text-sm font-semibold text-kOrange">{volunteer.status === 'Verified' ? 'Revoke verification' : 'Verify instead'}</button></div>}
     </div>
   </Modal>
 }
