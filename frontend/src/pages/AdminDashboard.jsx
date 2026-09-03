@@ -32,8 +32,16 @@ function StatCard({ a, b, c }) { return <div className="card-k p-5"><div classNa
 function frequencyLabel(freq) { return freq === 'monthly' ? 'Monthly' : 'One-time' }
 
 function Overview({ donations }) {
-  const total = donations.reduce((s, d) => s + Number(d.amount), 0)
-  const stats = [['Total donations', `KES ${total.toLocaleString()}`, `${donations.length} donors`], ['This month', `KES ${total.toLocaleString()}`, `${donations.length} donors`]]
+  // Only a confirmed-successful payment counts toward a money total —
+  // Pending (still waiting on the M-Pesa callback) and Failed
+  // (declined/cancelled/timed out) are real rows that must never be
+  // summed in as received money. In-kind (Food/Equipment) donations
+  // never go through this at all: donation_type === 'Cash' is what
+  // "amount" means a real payment here, matching the same definition
+  // used server-side (see cash_total in app/reports/routes.py).
+  const paidCash = donations.filter(d => d.donation_type === 'Cash' && d.status === 'Paid')
+  const total = paidCash.reduce((s, d) => s + Number(d.amount), 0)
+  const stats = [['Total donations', `KES ${total.toLocaleString()}`, `${paidCash.length} donors`], ['This month', `KES ${total.toLocaleString()}`, `${paidCash.length} donors`]]
   const recent = [...donations].sort((a, b) => b.id - a.id).slice(0, 4)
   return <Shell>
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><div className="eyebrow">Overview</div><h1 className="font-display text-3xl font-bold text-kGreen">Good morning, staff.</h1></div><Link to="/admin/donations" className="btn-orange"><Plus size={16} /> Add donation</Link></div>
