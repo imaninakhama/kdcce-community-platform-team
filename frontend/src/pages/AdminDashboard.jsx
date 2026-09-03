@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
-import { BarChart3, Plus, Trash2 } from 'lucide-react'
+import { BarChart3, Heart, Plus, Trash2 } from 'lucide-react'
 import Modal from '../components/admin/Modal'
 import Toast from '../components/admin/Toast'
 import Shell from '../components/admin/Shell'
@@ -29,6 +29,18 @@ const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 function StatCard({ a, b, c }) { return <div className="card-k p-5"><div className="text-sm text-kMuted">{a}</div><div className="mt-2 font-display text-3xl font-bold text-kGreen">{b}</div><div className="mt-2 text-xs font-semibold text-kOrange">{c}</div></div> }
 
+// The one figure the dashboard leads with — deliberately heavier than
+// the plain StatCards next to it (filled kGreen background, bigger
+// number) so it reads as the headline, not just one more tile in the
+// grid. Value/subtext are passed in already computed by Overview.
+function TotalDonationsCard({ amount, donorCount }) {
+  return <div className="rounded-2xl bg-kGreen p-5 text-white shadow-soft dark:shadow-none">
+    <div className="flex items-center gap-2 text-sm text-white/75"><Heart size={15} className="fill-current" /> Total Donations</div>
+    <div className="mt-2 font-display text-4xl font-bold">KES {amount.toLocaleString()}</div>
+    <div className="mt-2 text-xs font-semibold text-kLime">{donorCount} confirmed {donorCount === 1 ? 'donor' : 'donors'}</div>
+  </div>
+}
+
 function frequencyLabel(freq) { return freq === 'monthly' ? 'Monthly' : 'One-time' }
 
 function Overview({ donations }) {
@@ -41,11 +53,14 @@ function Overview({ donations }) {
   // used server-side (see cash_total in app/reports/routes.py).
   const paidCash = donations.filter(d => d.donation_type === 'Cash' && d.status === 'Paid')
   const total = paidCash.reduce((s, d) => s + Number(d.amount), 0)
-  const stats = [['Total donations', `KES ${total.toLocaleString()}`, `${paidCash.length} donors`], ['This month', `KES ${total.toLocaleString()}`, `${paidCash.length} donors`]]
+  const stats = [['This month', `KES ${total.toLocaleString()}`, `${paidCash.length} donors`]]
   const recent = [...donations].sort((a, b) => b.id - a.id).slice(0, 4)
   return <Shell>
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><div className="eyebrow">Overview</div><h1 className="font-display text-3xl font-bold text-kGreen">Good morning, staff.</h1></div><Link to="/admin/donations" className="btn-orange"><Plus size={16} /> Add donation</Link></div>
-    <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{stats.map(([a, b, c]) => <StatCard key={a} a={a} b={b} c={c} />)}</div>
+    <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <TotalDonationsCard amount={total} donorCount={paidCash.length} />
+      {stats.map(([a, b, c]) => <StatCard key={a} a={a} b={b} c={c} />)}
+    </div>
     <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
       <div className="card-k p-6"><div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold text-kGreen">Recent donations</h2><Link to="/admin/donations" className="text-sm font-semibold text-kOrange">View all</Link></div><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead className="border-b border-kBorderSoft text-xs uppercase tracking-wider text-kMuted"><tr><th className="pb-3">Donor</th><th>Amount</th><th>Frequency</th><th>Status</th><th>Date</th></tr></thead><tbody>{recent.map(r => <tr key={r.id} className="border-b border-kBorderSoft"><td className="py-4 font-semibold text-kInk">{r.donor_name}</td><td className="text-kMuted">KES {Number(r.amount).toLocaleString()}</td><td className="text-kMuted">{frequencyLabel(r.frequency)}</td><td className="text-kMuted">{r.status}</td><td className="text-kMuted">{r.created_at.slice(0, 10)}</td></tr>)}</tbody></table></div></div>
       <div className="card-k p-6"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-kTint text-kOrange"><BarChart3 /></div><div><h2 className="font-display text-xl font-bold text-kGreen">Impact pulse</h2><p className="text-sm text-kMuted">Donations this week</p></div></div><div className="mt-8 flex h-36 items-end justify-between gap-3">{[42, 66, 49, 80, 58, 72, 91].map((v, i) => <div key={i} className="flex flex-1 flex-col items-center gap-2"><div className="w-full rounded-t-lg bg-kOrange/75" style={{ height: `${v}%` }} /><span className="text-[10px] text-kMuted">{['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}</span></div>)}</div></div>
