@@ -1,4 +1,5 @@
-import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Activity, Boxes, CalendarDays, ClipboardCheck, FileImage, Gauge, HandHeart, Heart, HeartPulse, HeartHandshake, Home, Inbox, KeyRound, LayoutDashboard, ListChecks, LogOut, Pill, ShieldAlert, UserRound, Users, Utensils } from 'lucide-react'
 import ThemeToggle from '../../theme/ThemeToggle'
 import NotificationBell from './NotificationBell'
@@ -43,15 +44,62 @@ const icons = { LayoutDashboard, Heart, HeartPulse, HeartHandshake, Home, Pill, 
 
 export default function Shell({ children }) {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const user = getStoredUser()
   const menu = user?.role === 'admin' ? [...staffMenu, ...adminOnlyMenu] : staffMenu
   async function signOut() { await endSession(); navigate('/admin/login') }
-  // No min-h, and items-start instead of grid's default align-items:
-  // stretch — the sidebar's dark box must end at its own content (nav
-  // items + padding after Sign out), never stretched to match main
-  // content's height, however long that gets. kCream also resolves to a
-  // near-black navy in dark mode (close to the sidebar's own #071724),
-  // so any forced/stretched extra height there would visually read as
-  // "the dark sidebar keeps going" past its own content.
-  return <div className="bg-kCream"><div className="container-k grid items-start gap-6 py-8 lg:grid-cols-[230px_1fr]"><aside className="rounded-2xl bg-[#071724] p-4 text-white"><div className="mb-5 rounded-2xl bg-white px-3 py-3"><img src="/images/logo.png" alt="KDCCE" className="h-14 w-auto max-w-[185px] object-contain object-left" /></div><div className="mb-4 px-3"><div className="text-xs font-semibold uppercase tracking-widest text-kLime">Staff workspace</div><div className="mt-1 font-display text-lg font-bold">Admin portal</div>{user && <div className="mt-1 truncate text-xs text-white/60">{user.name} &middot; {user.role}</div>}<div className="-ml-1 mt-3 flex items-center gap-0.5"><GlobalSearch /><NotificationBell variant="dark" /><ThemeToggle variant="dark" /></div></div><nav className="grid gap-1">{menu.map(([label, to, icon]) => { const Icon = icons[icon]; return <NavLink end={to === '/admin'} key={to} to={to} className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${isActive ? 'bg-white text-kGreen' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}><Icon size={17} />{label}</NavLink> })}</nav><Link to="/" className="mt-6 flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-white/70 hover:bg-white/10"><LogOut size={17} /> Back to website</Link><button onClick={signOut} className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-white/70 hover:bg-white/10"><LogOut size={17} /> Sign out</button></aside><section>{children}</section></div></div>
+
+  // Each admin page mounts its own <Shell>, so this nav is a fresh DOM
+  // node on every navigation — without this, a section reached via a
+  // scrolled-out-of-view tab (or a direct URL) would leave its own
+  // active tab scrolled off-screen instead of visibly highlighted.
+  const activeLinkRef = useRef(null)
+  useEffect(() => { activeLinkRef.current?.scrollIntoView({ inline: 'center', block: 'nearest' }) }, [])
+  function isActiveTo(to) { return to === '/admin' ? pathname === '/admin' : pathname.startsWith(to) }
+
+  return <div className="min-h-screen bg-kCream">
+    {/* Top bar: brand, global search, notifications, theme, account —
+        same dark navy the sidebar used to use, same components
+        (GlobalSearch/NotificationBell/ThemeToggle) just relocated here
+        with the same variant="dark" they already supported. */}
+    <header className="bg-[#071724] text-white">
+      <div className="container-k flex flex-wrap items-center justify-between gap-4 py-3">
+        <div className="flex items-center gap-3">
+          <Link to="/admin" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white p-1.5"><img src="/images/logo.png" alt="KDCCE" className="h-full w-full object-contain" /></Link>
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-kLime">Staff workspace</div>
+            <div className="font-display text-base font-bold leading-tight">Admin portal</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <GlobalSearch />
+          <NotificationBell variant="dark" />
+          <ThemeToggle variant="dark" />
+          <div className="ml-2 flex items-center gap-3 border-l border-white/10 pl-3">
+            {user && <div className="hidden text-right sm:block"><div className="text-sm font-semibold leading-tight">{user.name}</div><div className="text-xs capitalize text-white/60">{user.role}</div></div>}
+            <button onClick={signOut} title="Sign out" aria-label="Sign out" className="grid h-9 w-9 place-items-center rounded-full text-white/70 hover:bg-white/10 hover:text-white"><LogOut size={17} /></button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    {/* Horizontal nav — every item from the old sidebar, same routes,
+        same active-state logic, just laid out as a scrollable row of
+        tabs instead of a vertical list. Scrolls rather than wraps or
+        hides anything behind a "more" menu, so all ~20 modules stay
+        equally one click away regardless of viewport width. */}
+    <nav className="border-b border-kBorderSoft bg-[#0b2233] text-white">
+      <div className="container-k">
+        <div className="flex gap-1 overflow-x-auto py-2 [scrollbar-width:thin]">
+          {menu.map(([label, to, icon]) => {
+            const Icon = icons[icon]
+            return <NavLink end={to === '/admin'} key={to} to={to} ref={isActiveTo(to) ? activeLinkRef : null} className={({ isActive }) => `flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition ${isActive ? 'bg-white text-kGreen' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}><Icon size={16} />{label}</NavLink>
+          })}
+          <Link to="/" className="ml-1 flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold text-white/50 hover:bg-white/10 hover:text-white"><LogOut size={16} /> Back to website</Link>
+        </div>
+      </div>
+    </nav>
+
+    <main className="container-k py-8"><section>{children}</section></main>
+  </div>
 }
