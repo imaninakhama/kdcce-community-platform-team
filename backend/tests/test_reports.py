@@ -343,11 +343,41 @@ def test_donations_report_totals_by_type(client, monkeypatch, make_staff_user, a
     client.post("/api/donations", json={"donor_name": "Amina", "donor_email": "amina@example.com", "donor_phone": "0712345678", "amount": 1000, "frequency": "one-time", "payment_method": "M-Pesa"})
     client.post("/api/admin/donations", json={"donation_type": "Food", "donor_name": "Grocer", "item_description": "Rice", "quantity": 20, "unit": "kg"}, headers=auth_header(token))
 
+    # cash_total is a money total — it must reflect a real, CONFIRMED
+    # payment, not just an initiated one. Without the M-Pesa callback
+    # below, the Cash donation above is still Pending.
+    callback_payload = {"Body": {"stkCallback": {
+        "CheckoutRequestID": "ws_CO_report_totals", "ResultCode": 0,
+        "CallbackMetadata": {"Item": [{"Name": "MpesaReceiptNumber", "Value": "RPT0REPORT1"}]},
+    }}}
+    client.post("/api/mpesa/callback", json=callback_payload)
+
     resp = client.get("/api/reports/donations", headers=auth_header(token))
     body = resp.get_json()["report"]
     assert body["total_count"] == 2
     assert body["by_type"] == {"Cash": 1, "Food": 1}
     assert body["cash_total"] == 1000.0
+
+
+def test_donations_report_cash_total_excludes_unconfirmed_payments(client, monkeypatch, make_staff_user, auth_header):
+    """Pending (never confirmed) and Failed (declined/cancelled/timed
+    out) Cash donations are real rows — they must never be summed into
+    cash_total as if the money had actually come in."""
+    _, token = make_staff_user("admin")
+
+    # Still Pending — the STK push was sent but no callback ever arrived.
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_report_pending")
+    client.post("/api/donations", json={"donor_name": "Pending Donor", "donor_email": "pending@example.com", "donor_phone": "0712345678", "amount": 2000, "frequency": "one-time", "payment_method": "M-Pesa"})
+
+    # Explicitly Failed via a real callback.
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_report_failed")
+    client.post("/api/donations", json={"donor_name": "Failed Donor", "donor_email": "failed@example.com", "donor_phone": "0712345678", "amount": 3000, "frequency": "one-time", "payment_method": "M-Pesa"})
+    client.post("/api/mpesa/callback", json={"Body": {"stkCallback": {"CheckoutRequestID": "ws_CO_report_failed", "ResultCode": 1032, "ResultDesc": "Request cancelled by user."}}})
+
+    resp = client.get("/api/reports/donations", headers=auth_header(token))
+    body = resp.get_json()["report"]
+    assert body["total_count"] == 2  # both rows exist and are visible...
+    assert body["cash_total"] == 0.0  # ...but neither counts as received money
 
 
 def test_donations_history_is_paginated(client, monkeypatch, make_staff_user, auth_header):

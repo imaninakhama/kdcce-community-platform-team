@@ -396,7 +396,14 @@ def donations_report():
     if date_to:
         donations = donations.filter(db.func.date(Donation.created_at) <= date_to.isoformat())
 
-    cash_total = donations.filter(Donation.donation_type == "Cash").with_entities(db.func.coalesce(db.func.sum(Donation.amount), 0)).scalar()
+    # Only a confirmed-successful payment counts toward a money total —
+    # Pending (still waiting on the M-Pesa callback) and Failed (declined/
+    # cancelled/timed out, see app/mpesa/service.py::process_callback)
+    # are real Cash rows that must never be summed in as received money.
+    cash_total = (
+        donations.filter(Donation.donation_type == "Cash", Donation.status == "Paid")
+        .with_entities(db.func.coalesce(db.func.sum(Donation.amount), 0)).scalar()
+    )
     by_date_rows = (
         donations.with_entities(db.func.date(Donation.created_at), db.func.count())
         .group_by(db.func.date(Donation.created_at)).order_by(db.func.date(Donation.created_at).asc()).all()
