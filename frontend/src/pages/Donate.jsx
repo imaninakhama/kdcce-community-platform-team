@@ -5,6 +5,7 @@ import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import PageHero from '../components/PageHero'
 import { apiFetch, ApiError } from '../lib/api'
+import { isValidKenyanPhone, PHONE_ERROR_MESSAGE, PHONE_MAX_LENGTH, sanitizePhoneInput } from '../lib/validation'
 
 async function downloadReceiptPdf(node, receiptId) {
   // Receipts print on paper — always render them in light colors for the
@@ -108,13 +109,17 @@ export default function Donate() {
     finally { setGeneratingPdf(false) }
   }
 
+  function handlePhoneChange(e) { e.target.value = sanitizePhoneInput(e.target.value) }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setMpesaTimedOut(false)
     setMpesaFailed(null)
-    setSubmitting(true)
     const f = new FormData(e.target)
+    const phone = f.get('phone')
+    if (!isValidKenyanPhone(phone)) { setError(PHONE_ERROR_MESSAGE); return }
+    setSubmitting(true)
     try {
       const { donation } = await apiFetch('/api/donations', {
         method: 'POST',
@@ -122,7 +127,7 @@ export default function Donate() {
         body: {
           donor_name: f.get('name'),
           donor_email: f.get('email'),
-          donor_phone: f.get('phone'),
+          donor_phone: phone,
           amount: Number(amount),
           currency: 'KES',
           frequency,
@@ -237,7 +242,7 @@ export default function Donate() {
         <div className="mt-7 grid gap-4 md:grid-cols-2">
           <label className="text-sm font-semibold">Full name<input name="name" className="input-k mt-2" placeholder="Your name" required /></label>
           <label className="text-sm font-semibold">Email<input name="email" className="input-k mt-2" type="email" placeholder="you@example.com" required /></label>
-          <label className="text-sm font-semibold">M-Pesa phone number<input name="phone" className="input-k mt-2" placeholder="07xx xxx xxx" required /></label>
+          <label className="text-sm font-semibold">M-Pesa phone number<input name="phone" className="input-k mt-2" placeholder="07XXXXXXXX" inputMode="tel" maxLength={PHONE_MAX_LENGTH} onChange={handlePhoneChange} required /></label>
           <label className="text-sm font-semibold">Campaign<select name="campaign" className="input-k mt-2"><option>General support</option><option>Sponsor an Elder</option><option>Feeding program</option><option>Skills training</option></select></label>
         </div>
         <label className="mt-4 block text-sm font-semibold">Message or dedication (optional)<textarea name="message" className="input-k mt-2 min-h-28" placeholder="e.g. In memory of..." /></label>

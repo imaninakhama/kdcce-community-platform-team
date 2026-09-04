@@ -101,6 +101,28 @@ def test_elderly_create_rejects_invalid_gender(client, make_staff_user, auth_hea
     assert resp.status_code == 400
 
 
+def test_elderly_create_accepts_valid_emergency_contact_phone(client, make_staff_user, auth_header):
+    _, token = make_staff_user("admin")
+    resp = client.post(
+        "/api/elderly",
+        json={**VALID_MEMBER, "emergency_contact_phone": "0712345678"},
+        headers=auth_header(token),
+    )
+    assert resp.status_code == 201
+    assert resp.get_json()["member"]["emergency_contact_phone"] == "0712345678"
+
+
+def test_elderly_create_rejects_invalid_emergency_contact_phone(client, make_staff_user, auth_header):
+    _, token = make_staff_user("admin")
+    resp = client.post(
+        "/api/elderly",
+        json={**VALID_MEMBER, "emergency_contact_phone": "07123"},
+        headers=auth_header(token),
+    )
+    assert resp.status_code == 400
+    assert resp.get_json()["details"]["emergency_contact_phone"] == ["Enter a valid phone number starting with 07 or +2547."]
+
+
 def test_elderly_create_rejects_unknown_opa(client, make_staff_user, auth_header):
     _, token = make_staff_user("admin")
     resp = client.post("/api/elderly", json={**VALID_MEMBER, "opa_id": 999}, headers=auth_header(token))

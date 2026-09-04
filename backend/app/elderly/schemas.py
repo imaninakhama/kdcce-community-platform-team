@@ -1,6 +1,7 @@
 from marshmallow import Schema, fields, validate
 
 from ..models import ELDERLY_GENDERS, ELDERLY_STATUSES
+from ..utils import validate_kenyan_phone
 
 
 class OPASchema(Schema):
@@ -16,7 +17,7 @@ class ElderlyMemberSchema(Schema):
     location = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=150))
     opa_id = fields.Integer(load_default=None, allow_none=True)
     emergency_contact_name = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=120))
-    emergency_contact_phone = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=40))
+    emergency_contact_phone = fields.String(load_default=None, allow_none=True, validate=validate_kenyan_phone)
     emergency_contact_relationship = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=60))
     vulnerability_notes = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=4000))
     health_notes = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=4000))

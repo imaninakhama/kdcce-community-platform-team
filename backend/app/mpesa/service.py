@@ -1,5 +1,4 @@
 import base64
-import re
 from datetime import datetime
 
 import requests
@@ -8,6 +7,7 @@ from flask import current_app
 from ..email.service import send_email
 from ..extensions import db
 from ..models import Donation
+from ..utils import KENYA_PHONE_REGEX
 
 TIMEOUT = 15  # seconds — Daraja sandbox is occasionally slow; fail fast rather than hang the request
 
@@ -35,21 +35,15 @@ def _require_config():
 
 
 def normalize_phone(raw):
-    """Daraja requires the subscriber's number as 2547XXXXXXXX / 2541XXXXXXXX
-    (country code, no leading 0 or +). Accepts the common local formats
-    (0712345678, +254712345678, 254712345678, with or without spaces) and
-    returns None if the result doesn't look like a real Safaricom-format
-    number, rather than sending obvious garbage to Daraja."""
-    digits = re.sub(r"\D", "", raw or "")
-    if digits.startswith("0") and len(digits) == 10:
-        digits = "254" + digits[1:]
-    elif digits.startswith("254") and len(digits) == 12:
-        pass
-    elif len(digits) == 9 and digits[0] in ("7", "1"):
-        digits = "254" + digits
-    else:
+    """Daraja requires the subscriber's number as 2547XXXXXXXX (country
+    code, no leading 0 or +). Only the two formats accepted everywhere else
+    phone numbers are collected (see utils.KENYA_PHONE_REGEX) are accepted
+    here — 07XXXXXXXX or +2547XXXXXXXX — anything else returns None rather
+    than sending garbage to Daraja."""
+    raw = (raw or "").strip()
+    if not KENYA_PHONE_REGEX.match(raw):
         return None
-    return digits if re.match(r"^254[71]\d{8}$", digits) else None
+    return "254" + raw[1:] if raw.startswith("07") else raw[1:]
 
 
 # Safaricom's own ResultDesc strings are inconsistent/technical ("DS

@@ -14,18 +14,44 @@ def test_normalize_phone_local_format():
     assert normalize_phone("0712345678") == "254712345678"
 
 
-def test_normalize_phone_already_254():
-    assert normalize_phone("254712345678") == "254712345678"
-
-
 def test_normalize_phone_plus_254():
-    assert normalize_phone("+254 712 345 678") == "254712345678"
+    assert normalize_phone("+254712345678") == "254712345678"
+
+
+def test_normalize_phone_rejects_bare_254_without_plus():
+    # Only 07XXXXXXXX and +2547XXXXXXXX are accepted formats — a bare
+    # "254..." with no leading "+" no longer normalizes, even though an
+    # earlier, looser version of this function accepted it.
+    assert normalize_phone("254712345678") is None
+
+
+def test_normalize_phone_rejects_spaces():
+    # The frontend never lets a space reach this function (digits and a
+    # leading "+" only), so the backend doesn't tolerate one either.
+    assert normalize_phone("+254 712 345 678") is None
 
 
 def test_normalize_phone_rejects_garbage():
     assert normalize_phone("not a phone number") is None
     assert normalize_phone("12345") is None
     assert normalize_phone("") is None
+
+
+def test_normalize_phone_rejects_wrong_prefix():
+    assert normalize_phone("0812345678") is None  # not 07
+    assert normalize_phone("+2540712345678") is None  # +254 then 0, not 7
+
+
+def test_normalize_phone_rejects_short_and_long():
+    assert normalize_phone("071234567") is None  # 9 digits, one short
+    assert normalize_phone("07123456789") is None  # 11 digits, one long
+    assert normalize_phone("+25471234567") is None  # 8 digits after 2547, one short
+    assert normalize_phone("+2547123456789") is None  # 10 digits after 254, one long
+
+
+def test_normalize_phone_rejects_misplaced_plus():
+    assert normalize_phone("07+12345678") is None
+    assert normalize_phone("254+712345678") is None
 
 
 def test_mpesa_donation_rejects_missing_phone(client):
@@ -38,7 +64,15 @@ def test_mpesa_donation_rejects_missing_phone(client):
 def test_mpesa_donation_rejects_invalid_phone(client):
     resp = client.post("/api/donations", json={**VALID_MPESA_DONATION, "donor_phone": "not-a-number"})
     assert resp.status_code == 400
-    assert "donor_phone" in resp.get_json()["details"]
+    details = resp.get_json()["details"]
+    assert "donor_phone" in details
+    assert details["donor_phone"] == ["Enter a valid phone number starting with 07 or +2547."]
+
+
+def test_mpesa_donation_accepts_plus_254_format(client, monkeypatch):
+    monkeypatch.setattr("app.donations.routes.initiate_stk_push", lambda **kwargs: "ws_CO_plus254")
+    resp = client.post("/api/donations", json={**VALID_MPESA_DONATION, "donor_phone": "+254712345678"})
+    assert resp.status_code == 201
 
 
 def test_mpesa_donation_without_config_returns_502(client):

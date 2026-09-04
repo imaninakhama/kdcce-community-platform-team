@@ -210,6 +210,20 @@ def test_staff_can_log_a_walk_in_cash_donation(client, make_staff_user, auth_hea
     assert body["donor_email"] is None  # never required for the admin path
 
 
+def test_staff_can_log_donation_with_valid_phone(client, make_staff_user, auth_header):
+    _, token = make_staff_user("admin")
+    resp = client.post("/api/admin/donations", json={**VALID_CASH_ADMIN, "donor_phone": "+254712345678"}, headers=auth_header(token))
+    assert resp.status_code == 201
+    assert resp.get_json()["donation"]["donor_phone"] == "+254712345678"
+
+
+def test_staff_logging_donation_rejects_invalid_phone(client, make_staff_user, auth_header):
+    _, token = make_staff_user("admin")
+    resp = client.post("/api/admin/donations", json={**VALID_CASH_ADMIN, "donor_phone": "0123"}, headers=auth_header(token))
+    assert resp.status_code == 400
+    assert resp.get_json()["details"]["donor_phone"] == ["Enter a valid phone number starting with 07 or +2547."]
+
+
 def test_staff_can_log_a_cash_donation_reported_via_paypal(client, make_staff_user, auth_header):
     # Unlike the public form, staff logging an already-completed offline
     # donation may record any payment_method, including ones with no live

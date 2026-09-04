@@ -5,6 +5,7 @@ import ThemeToggle from '../theme/ThemeToggle'
 import PasswordField from '../components/PasswordField'
 import { apiFetch, setSession, ApiError } from '../lib/api'
 import { VOLUNTEER_STATUS_LABELS, VOLUNTEER_STATUS_STYLES } from '../lib/volunteerStatus'
+import { isValidKenyanPhone, PHONE_ERROR_MESSAGE, PHONE_MAX_LENGTH, sanitizePhoneInput } from '../lib/validation'
 
 const AREAS = ['Home visits', 'Feeding program', 'Health & wellness support', 'Activities & companionship', 'Fundraising & events', 'Admin & office support']
 const AVAILABILITY_OPTIONS = ['Weekdays', 'Weekends', 'Flexible']
@@ -53,11 +54,15 @@ function validateField(name, rawValue) {
     case 'email':
       if (!value) return 'Please enter your email address.'
       return EMAIL_RE.test(value) ? '' : 'Please enter a valid email address.'
-    case 'phone': return value ? '' : 'Please enter your phone number.'
+    case 'phone':
+      if (!value) return 'Please enter your phone number.'
+      return isValidKenyanPhone(value) ? '' : PHONE_ERROR_MESSAGE
     case 'date_of_birth': return validateDateOfBirth(rawValue)
     case 'county': return value ? '' : 'Please enter your county/location.'
     case 'emergency_contact_name': return value ? '' : "Please enter your emergency contact's name."
-    case 'emergency_contact_phone': return value ? '' : "Please enter your emergency contact's phone number."
+    case 'emergency_contact_phone':
+      if (!value) return "Please enter your emergency contact's phone number."
+      return isValidKenyanPhone(value) ? '' : PHONE_ERROR_MESSAGE
     case 'availability': return value ? '' : 'Please select your availability.'
     case 'min_hours_available': return validateMinHours(rawValue)
     case 'motivation': return value ? '' : 'Please tell us why you want to volunteer with KDCCE.'
@@ -136,6 +141,18 @@ export default function VolunteerSignUp() {
     if (!submitAttempted) return
     const { name, value } = e.target
     setErrors(er => ({ ...er, [name]: validateField(name, value) }))
+  }
+  // Filters keystrokes to digits and a leading "+" before running the
+  // same validation handleChange/handleBlur do, so a phone field can't
+  // ever hold a letter, a space, or a misplaced "+". Shared by both
+  // phone inputs on this form (phone, emergency_contact_phone).
+  function handlePhoneChange(e) {
+    e.target.value = sanitizePhoneInput(e.target.value)
+    handleChange(e)
+  }
+  function handlePhoneBlur(e) {
+    e.target.value = sanitizePhoneInput(e.target.value)
+    handleBlur(e)
   }
 
   function handlePasswordChange(e) {
@@ -311,9 +328,10 @@ export default function VolunteerSignUp() {
           />
           <Field
             label="Phone number" name="phone" placeholder="07XXXXXXXX" required
+            inputMode="tel" maxLength={PHONE_MAX_LENGTH}
             inputRef={el => (fieldRefs.current.phone = el)}
             error={shouldShow('phone') ? errors.phone : ''}
-            onBlur={handleBlur} onChange={handleChange}
+            onBlur={handlePhoneBlur} onChange={handlePhoneChange}
           />
           <Field
             label="Date of birth" name="date_of_birth" type="date" required
@@ -352,9 +370,10 @@ export default function VolunteerSignUp() {
           />
           <Field
             label="Emergency contact phone" name="emergency_contact_phone" placeholder="07XXXXXXXX" required
+            inputMode="tel" maxLength={PHONE_MAX_LENGTH}
             inputRef={el => (fieldRefs.current.emergency_contact_phone = el)}
             error={shouldShow('emergency_contact_phone') ? errors.emergency_contact_phone : ''}
-            onBlur={handleBlur} onChange={handleChange}
+            onBlur={handlePhoneBlur} onChange={handlePhoneChange}
           />
         </div>
 

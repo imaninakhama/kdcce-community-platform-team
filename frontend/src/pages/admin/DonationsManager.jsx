@@ -5,6 +5,7 @@ import Modal from '../../components/admin/Modal'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { useApiResource } from '../../lib/useApiResource'
 import { downloadFile } from '../../lib/api'
+import { isValidKenyanPhone, PHONE_ERROR_MESSAGE, PHONE_MAX_LENGTH, sanitizePhoneInput } from '../../lib/validation'
 
 const TYPES = ['Cash', 'Food', 'Equipment']
 const CASH_STATUSES = ['Paid', 'Pending']
@@ -43,22 +44,36 @@ function SummaryCard({ label, value, sub, Icon, tone }) {
 
 function DonationForm({ onSubmit, saving }) {
   const [type, setType] = useState('Cash')
+  const [phoneError, setPhoneError] = useState('')
   const isCash = type === 'Cash'
   const statuses = isCash ? CASH_STATUSES : IN_KIND_STATUSES
+
+  function handlePhoneChange(e) {
+    e.target.value = sanitizePhoneInput(e.target.value)
+    if (phoneError) setPhoneError('')
+  }
+  function handlePhoneBlur(e) {
+    const value = sanitizePhoneInput(e.target.value)
+    e.target.value = value
+    setPhoneError(value && !isValidKenyanPhone(value) ? PHONE_ERROR_MESSAGE : '')
+  }
 
   function submit(e) {
     e.preventDefault()
     const f = new FormData(e.target)
+    const phone = f.get('donor_phone') || null
+    if (phone && !isValidKenyanPhone(phone)) { setPhoneError(PHONE_ERROR_MESSAGE); return }
+    setPhoneError('')
     const payload = isCash
       ? {
           donation_type: 'Cash',
-          donor_name: f.get('donor_name'), donor_email: f.get('donor_email'), donor_phone: f.get('donor_phone') || null,
+          donor_name: f.get('donor_name'), donor_email: f.get('donor_email'), donor_phone: phone,
           amount: Number(f.get('amount')), payment_method: f.get('payment_method') || null,
           campaign: f.get('campaign') || null, status: f.get('status'),
         }
       : {
           donation_type: type,
-          donor_name: f.get('donor_name'), donor_email: f.get('donor_email') || null, donor_phone: f.get('donor_phone') || null,
+          donor_name: f.get('donor_name'), donor_email: f.get('donor_email') || null, donor_phone: phone,
           item_description: f.get('item_description'), quantity: Number(f.get('quantity')), unit: f.get('unit'),
           amount: f.get('amount') ? Number(f.get('amount')) : null,
           campaign: f.get('campaign') || null, status: f.get('status'),
@@ -72,7 +87,15 @@ function DonationForm({ onSubmit, saving }) {
       <label className="text-sm font-semibold">Donor name<input name="donor_name" className="input-k mt-2" required /></label>
       <label className="text-sm font-semibold">Email{!isCash && ' (optional)'}<input name="donor_email" type="email" className="input-k mt-2" required={isCash} /></label>
     </div>
-    <label className="text-sm font-semibold">Phone (optional)<input name="donor_phone" className="input-k mt-2" /></label>
+    <label className="text-sm font-semibold">Phone (optional)
+      <input
+        name="donor_phone" placeholder="07XXXXXXXX" inputMode="tel" maxLength={PHONE_MAX_LENGTH}
+        className={`input-k mt-2 ${phoneError ? 'border-red-400' : ''}`}
+        onChange={handlePhoneChange} onBlur={handlePhoneBlur}
+        aria-invalid={!!phoneError}
+      />
+      {phoneError && <p role="alert" className="mt-1.5 text-xs font-semibold text-red-600">{phoneError}</p>}
+    </label>
 
     {isCash ? <>
       <div className="grid grid-cols-2 gap-4">

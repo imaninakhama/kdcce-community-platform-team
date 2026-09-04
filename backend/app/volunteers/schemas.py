@@ -3,6 +3,7 @@ from datetime import date
 from marshmallow import Schema, fields, validate, ValidationError
 
 from ..models import VOLUNTEER_STATUSES
+from ..utils import validate_kenyan_phone
 
 
 def _not_under_18_or_future(value):
@@ -20,7 +21,7 @@ class VolunteerSelfUpdateSchema(Schema):
     the initial application (immediately after registration) and for later
     self-service edits — the same fields are editable either way."""
 
-    phone = fields.String(allow_none=True, validate=validate.Length(max=40))
+    phone = fields.String(allow_none=True, validate=validate_kenyan_phone)
     skills = fields.String(allow_none=True, validate=validate.Length(max=1000))
     availability = fields.String(allow_none=True, validate=validate.Length(max=1000))
     areas_of_interest = fields.String(allow_none=True, validate=validate.Length(max=1000))
@@ -31,7 +32,7 @@ class VolunteerSelfUpdateSchema(Schema):
     county = fields.String(allow_none=True, validate=validate.Length(max=80))
     min_hours_available = fields.Integer(allow_none=True, validate=validate.Range(min=1))
     emergency_contact_name = fields.String(allow_none=True, validate=validate.Length(max=120))
-    emergency_contact_phone = fields.String(allow_none=True, validate=validate.Length(max=40))
+    emergency_contact_phone = fields.String(allow_none=True, validate=validate_kenyan_phone)
     # These three consent flags may only ever be set to True by a
     # self-update — validate.Equal(True) rejects an explicit False in the
     # payload (a crafted request can't "unagree" someone), while omitting

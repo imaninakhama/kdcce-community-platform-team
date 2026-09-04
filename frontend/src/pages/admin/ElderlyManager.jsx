@@ -6,6 +6,7 @@ import Modal from '../../components/admin/Modal'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { useApiResource } from '../../lib/useApiResource'
 import { getStoredUser } from '../../lib/api'
+import { isValidKenyanPhone, PHONE_ERROR_MESSAGE, PHONE_MAX_LENGTH, sanitizePhoneInput } from '../../lib/validation'
 
 const GENDERS = ['Male', 'Female', 'Other']
 const STATUSES = ['Active', 'Inactive', 'Deceased', 'Transferred']
@@ -47,7 +48,20 @@ export default function ElderlyManager({ showToast }) {
   const [statusFilter, setStatusFilter] = useState('All')
   const [modal, setModal] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [phoneError, setPhoneError] = useState('')
   const isAdmin = getStoredUser()?.role === 'admin'
+
+  function openModal(data) { setPhoneError(''); setModal(data ? { data } : {}) }
+  function closeModal() { setPhoneError(''); setModal(null) }
+  function handlePhoneChange(e) {
+    e.target.value = sanitizePhoneInput(e.target.value)
+    if (phoneError) setPhoneError('')
+  }
+  function handlePhoneBlur(e) {
+    const value = sanitizePhoneInput(e.target.value)
+    e.target.value = value
+    setPhoneError(value && !isValidKenyanPhone(value) ? PHONE_ERROR_MESSAGE : '')
+  }
 
   const filtered = membersApi.items.filter(m =>
     (statusFilter === 'All' || m.status === statusFilter) &&
@@ -57,6 +71,9 @@ export default function ElderlyManager({ showToast }) {
   async function save(e) {
     e.preventDefault()
     const f = new FormData(e.target)
+    const phone = f.get('emergency_contact_phone') || null
+    if (phone && !isValidKenyanPhone(phone)) { setPhoneError(PHONE_ERROR_MESSAGE); return }
+    setPhoneError('')
     const opaVal = f.get('opa_id')
     const data = {
       full_name: f.get('full_name'),
@@ -66,7 +83,7 @@ export default function ElderlyManager({ showToast }) {
       opa_id: opaVal ? Number(opaVal) : null,
       status: f.get('status'),
       emergency_contact_name: f.get('emergency_contact_name') || null,
-      emergency_contact_phone: f.get('emergency_contact_phone') || null,
+      emergency_contact_phone: phone,
       emergency_contact_relationship: f.get('emergency_contact_relationship') || null,
       vulnerability_notes: f.get('vulnerability_notes') || null,
       health_notes: f.get('health_notes') || null,
@@ -91,7 +108,7 @@ export default function ElderlyManager({ showToast }) {
   return <Shell>
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
       <div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Elderly members</h1></div>
-      <button onClick={() => setModal({})} className="btn-green"><Plus size={16} /> Register member</button>
+      <button onClick={() => openModal()} className="btn-green"><Plus size={16} /> Register member</button>
     </div>
 
     <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_320px]">
@@ -102,7 +119,7 @@ export default function ElderlyManager({ showToast }) {
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-sm text-kInk"><option>All</option>{STATUSES.map(s => <option key={s}>{s}</option>)}</select>
           </div>
           <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="bg-kBorderSoft text-xs uppercase tracking-wider text-kMuted"><tr><th className="px-5 py-4">Member ID</th><th className="px-5 py-4">Name</th><th className="px-5 py-4">Gender</th><th className="px-5 py-4">OPA</th><th className="px-5 py-4">Status</th><th className="px-5 py-4">Actions</th></tr></thead><tbody>
-            {filtered.map(m => <tr key={m.id} className="border-b border-kBorderSoft"><td className="px-5 py-4 text-kMuted">{m.member_id}</td><td className="px-5 py-4 font-semibold text-kInk">{m.full_name}</td><td className="px-5 py-4 text-kMuted">{m.gender}</td><td className="px-5 py-4 text-kMuted">{m.opa_name || '—'}</td><td className="px-5 py-4 text-kMuted">{m.status}</td><td className="px-5 py-4"><div className="flex gap-3"><Link to={`/admin/elderly/${m.id}`} className="text-kGreen" title="View profile"><User size={16} /></Link><button onClick={() => setModal({ data: m })} className="text-kOrange" title="Edit"><Pencil size={16} /></button>{isAdmin && <button onClick={() => remove(m)} className="text-kMuted hover:text-red-600" title="Delete"><Trash2 size={16} /></button>}</div></td></tr>)}
+            {filtered.map(m => <tr key={m.id} className="border-b border-kBorderSoft"><td className="px-5 py-4 text-kMuted">{m.member_id}</td><td className="px-5 py-4 font-semibold text-kInk">{m.full_name}</td><td className="px-5 py-4 text-kMuted">{m.gender}</td><td className="px-5 py-4 text-kMuted">{m.opa_name || '—'}</td><td className="px-5 py-4 text-kMuted">{m.status}</td><td className="px-5 py-4"><div className="flex gap-3"><Link to={`/admin/elderly/${m.id}`} className="text-kGreen" title="View profile"><User size={16} /></Link><button onClick={() => openModal(m)} className="text-kOrange" title="Edit"><Pencil size={16} /></button>{isAdmin && <button onClick={() => remove(m)} className="text-kMuted hover:text-red-600" title="Delete"><Trash2 size={16} /></button>}</div></td></tr>)}
             {filtered.length === 0 && <tr><td colSpan={6} className="px-5 py-10 text-center text-sm text-kMuted">No members match your search.</td></tr>}
           </tbody></table></div>
         </div>}
@@ -110,7 +127,7 @@ export default function ElderlyManager({ showToast }) {
       <OpaPanel opas={opasApi.items} loading={opasApi.loading} createOpa={opasApi.create} showToast={showToast} />
     </div>
 
-    {modal && <Modal title={modal.data ? 'Edit member' : 'Register elderly member'} onClose={() => setModal(null)}>
+    {modal && <Modal title={modal.data ? 'Edit member' : 'Register elderly member'} onClose={closeModal}>
       <form onSubmit={save} className="grid gap-4">
         <label className="text-sm font-semibold">Full name<input name="full_name" defaultValue={modal.data?.full_name} className="input-k mt-2" required /></label>
         <div className="grid grid-cols-2 gap-4">
@@ -126,7 +143,16 @@ export default function ElderlyManager({ showToast }) {
         <div className="mt-1 text-xs font-bold uppercase tracking-wider text-kMuted">Emergency contact</div>
         <div className="grid grid-cols-2 gap-4">
           <label className="text-sm font-semibold">Name<input name="emergency_contact_name" defaultValue={modal.data?.emergency_contact_name} className="input-k mt-2" /></label>
-          <label className="text-sm font-semibold">Phone<input name="emergency_contact_phone" defaultValue={modal.data?.emergency_contact_phone} className="input-k mt-2" /></label>
+          <label className="text-sm font-semibold">Phone
+            <input
+              name="emergency_contact_phone" defaultValue={modal.data?.emergency_contact_phone} placeholder="07XXXXXXXX"
+              inputMode="tel" maxLength={PHONE_MAX_LENGTH}
+              className={`input-k mt-2 ${phoneError ? 'border-red-400' : ''}`}
+              onChange={handlePhoneChange} onBlur={handlePhoneBlur}
+              aria-invalid={!!phoneError}
+            />
+            {phoneError && <p role="alert" className="mt-1.5 text-xs font-semibold text-red-600">{phoneError}</p>}
+          </label>
         </div>
         <label className="text-sm font-semibold">Relationship<input name="emergency_contact_relationship" defaultValue={modal.data?.emergency_contact_relationship} className="input-k mt-2" /></label>
 
