@@ -11,10 +11,13 @@ import Sponsor from './pages/Sponsor'
 import Donate from './pages/Donate'
 import Contact from './pages/Contact'
 import BecomeAVolunteer from './pages/BecomeAVolunteer'
+import ImpactStories from './pages/ImpactStories'
+import ImpactStoryDetail from './pages/ImpactStoryDetail'
 import AdminLogin from './pages/AdminLogin'
 import AdminDashboard from './pages/AdminDashboard'
 import VolunteerPortal from './pages/VolunteerPortal'
 import VolunteerInvitation from './pages/VolunteerInvitation'
+import VolunteerSignUp from './pages/VolunteerSignUp'
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation()
@@ -36,6 +39,8 @@ export default function App() {
         <Route path="/programs" element={<Programs />} />
         <Route path="/programs/:id" element={<ProgramDetail />} />
         <Route path="/gallery" element={<Gallery />} />
+        <Route path="/impact-stories" element={<ImpactStories />} />
+        <Route path="/impact-stories/:id" element={<ImpactStoryDetail />} />
         <Route path="/sponsor" element={<Sponsor />} />
         <Route path="/donate" element={<Donate />} />
         <Route path="/contact" element={<Contact />} />
@@ -43,6 +48,7 @@ export default function App() {
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/*" element={<AdminDashboard />} />
         <Route path="/volunteer/invitation/:token" element={<VolunteerInvitation />} />
+        <Route path="/volunteer/signup" element={<VolunteerSignUp />} />
         <Route path="/volunteer/*" element={<VolunteerPortal />} />
       </Routes>
     </main>
