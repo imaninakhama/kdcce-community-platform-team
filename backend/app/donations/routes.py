@@ -7,7 +7,7 @@ from ..auth.decorators import roles_required
 from ..extensions import db, limiter
 from ..models import Donation, utcnow
 from ..mpesa.service import MpesaError, initiate_stk_push, normalize_phone
-from ..utils import csv_response, get_or_404, validation_error_response
+from ..utils import PHONE_ERROR_MESSAGE, csv_response, get_or_404, validation_error_response
 from .schemas import AdminDonationCreateSchema, DonationCreateSchema
 
 bp = Blueprint("donations", __name__)
@@ -58,7 +58,7 @@ def _create_mpesa_donation(data):
     if not phone:
         return jsonify(
             error="Validation failed",
-            details={"donor_phone": ["A valid Safaricom number is required for M-Pesa, e.g. 07XXXXXXXX."]},
+            details={"donor_phone": [PHONE_ERROR_MESSAGE]},
         ), 400
 
     donation = Donation(

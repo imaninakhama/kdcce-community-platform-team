@@ -1,11 +1,29 @@
 import csv
 import io
+import re
 from datetime import date
 
 from flask import abort, jsonify, make_response
 from flask_jwt_extended import create_access_token, create_refresh_token
+from marshmallow import ValidationError
 
 from .extensions import db
+
+# Shared by every schema that collects a Kenyan phone number (donations,
+# volunteers, elderly emergency contacts) so the accepted formats and error
+# message never drift between them. Only two formats are accepted:
+# 07XXXXXXXX (10 digits) or +2547XXXXXXXX (+254 then 9 digits starting with
+# 7) — matches the character-level input restriction enforced on the
+# frontend (digits only, "+" only as the first character), so a value that
+# reaches here already passed that filter unless submitted directly
+# against the API.
+KENYA_PHONE_REGEX = re.compile(r"^(07\d{8}|\+2547\d{8})$")
+PHONE_ERROR_MESSAGE = "Enter a valid phone number starting with 07 or +2547."
+
+
+def validate_kenyan_phone(value):
+    if not KENYA_PHONE_REGEX.match(value or ""):
+        raise ValidationError(PHONE_ERROR_MESSAGE)
 
 
 def issue_tokens(user):

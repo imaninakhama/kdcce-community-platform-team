@@ -1,6 +1,7 @@
 from marshmallow import Schema, fields, validate, validates_schema, ValidationError
 
 from ..models import DONATION_FREQUENCIES, DONATION_TYPES
+from ..utils import validate_kenyan_phone
 
 ALLOWED_CURRENCIES = ("KES",)
 # The public donation form only ever goes through a real sandbox gateway —
@@ -25,7 +26,7 @@ class DonationCreateSchema(Schema):
 
     donor_name = fields.String(required=True, validate=validate.Length(min=1, max=120))
     donor_email = fields.Email(required=True)
-    donor_phone = fields.String(load_default=None, validate=validate.Length(max=40))
+    donor_phone = fields.String(load_default=None, validate=validate_kenyan_phone)
     amount = fields.Decimal(required=True, as_string=False, places=2, validate=validate.Range(min=1))
     currency = fields.String(load_default="KES", validate=validate.OneOf(ALLOWED_CURRENCIES))
     frequency = fields.String(required=True, validate=validate.OneOf(DONATION_FREQUENCIES))
@@ -43,7 +44,7 @@ class AdminDonationCreateSchema(Schema):
     donation_type = fields.String(required=True, validate=validate.OneOf(DONATION_TYPES))
     donor_name = fields.String(required=True, validate=validate.Length(min=1, max=120))
     donor_email = fields.Email(load_default=None, allow_none=True)
-    donor_phone = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=40))
+    donor_phone = fields.String(load_default=None, allow_none=True, validate=validate_kenyan_phone)
     amount = fields.Decimal(load_default=None, allow_none=True, as_string=False, places=2, validate=validate.Range(min=0.01))
     currency = fields.String(load_default="KES", validate=validate.OneOf(ALLOWED_CURRENCIES))
     payment_method = fields.String(load_default=None, allow_none=True, validate=validate.OneOf(ALLOWED_PAYMENT_METHODS))

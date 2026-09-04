@@ -43,6 +43,27 @@ def test_me_requires_auth(client):
     assert resp.status_code == 401
 
 
+def test_self_update_accepts_plus_254_phone(client, make_user, auth_header):
+    _, access_token, _ = make_user(email="vol_plus254@example.com")
+    resp = client.patch("/api/volunteers/me", json={"phone": "+254712345678"}, headers=auth_header(access_token))
+    assert resp.status_code == 200
+    assert resp.get_json()["volunteer"]["phone"] == "+254712345678"
+
+
+def test_self_update_rejects_invalid_phone(client, make_user, auth_header):
+    _, access_token, _ = make_user(email="vol_badphone@example.com")
+    resp = client.patch("/api/volunteers/me", json={"phone": "12345"}, headers=auth_header(access_token))
+    assert resp.status_code == 400
+    assert resp.get_json()["details"]["phone"] == ["Enter a valid phone number starting with 07 or +2547."]
+
+
+def test_self_update_rejects_wrong_prefix_phone(client, make_user, auth_header):
+    _, access_token, _ = make_user(email="vol_wrongprefix@example.com")
+    resp = client.patch("/api/volunteers/me", json={"phone": "0812345678"}, headers=auth_header(access_token))
+    assert resp.status_code == 400
+    assert "phone" in resp.get_json()["details"]
+
+
 # ---------- Application (extends the same self-update path) ----------
 
 def test_volunteer_can_submit_full_application_via_self_update(client, make_user, auth_header):

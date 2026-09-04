@@ -1,6 +1,7 @@
 from marshmallow import Schema, fields, validate
 
 from ..models import VOLUNTEER_STATUSES
+from ..utils import validate_kenyan_phone
 
 
 class VolunteerSelfUpdateSchema(Schema):
@@ -9,7 +10,7 @@ class VolunteerSelfUpdateSchema(Schema):
     the initial application (immediately after registration) and for later
     self-service edits — the same fields are editable either way."""
 
-    phone = fields.String(allow_none=True, validate=validate.Length(max=40))
+    phone = fields.String(allow_none=True, validate=validate_kenyan_phone)
     skills = fields.String(allow_none=True, validate=validate.Length(max=1000))
     availability = fields.String(allow_none=True, validate=validate.Length(max=1000))
     areas_of_interest = fields.String(allow_none=True, validate=validate.Length(max=1000))

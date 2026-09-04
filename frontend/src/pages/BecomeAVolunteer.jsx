@@ -4,6 +4,7 @@ import { CheckCircle2, HeartHandshake, AlertCircle, Clock } from 'lucide-react'
 import PageHero from '../components/PageHero'
 import PasswordField from '../components/PasswordField'
 import { apiFetch, setSession, ApiError } from '../lib/api'
+import { isValidKenyanPhone, PHONE_ERROR_MESSAGE, PHONE_MAX_LENGTH, sanitizePhoneInput } from '../lib/validation'
 
 const AREAS = ['Home visits', 'Feeding program', 'Health & wellness support', 'Activities & companionship', 'Fundraising & events', 'Admin & office support']
 const AVAILABILITY_OPTIONS = ['Weekdays', 'Weekends', 'Flexible']
@@ -19,7 +20,9 @@ function validateField(name, rawValue) {
     case 'email':
       if (!value) return 'Please enter your email address.'
       return EMAIL_RE.test(value) ? '' : 'Please enter a valid email address.'
-    case 'phone': return value ? '' : 'Please enter your phone number.'
+    case 'phone':
+      if (!value) return 'Please enter your phone number.'
+      return isValidKenyanPhone(value) ? '' : PHONE_ERROR_MESSAGE
     case 'skills': return value ? '' : 'Please tell us about your skills.'
     case 'availability': return value ? '' : 'Please select your availability.'
     case 'motivation': return value ? '' : 'Please tell us why you want to volunteer with KDCCE.'
@@ -91,6 +94,17 @@ export default function BecomeAVolunteer() {
     if (!submitAttempted) return
     const { name, value } = e.target
     setErrors(er => ({ ...er, [name]: validateField(name, value) }))
+  }
+  // Filters keystrokes to digits and a leading "+" before running the
+  // same validation handleChange does, so a phone field can't ever hold
+  // a letter, a space, or a misplaced "+".
+  function handlePhoneChange(e) {
+    e.target.value = sanitizePhoneInput(e.target.value)
+    handleChange(e)
+  }
+  function handlePhoneBlur(e) {
+    e.target.value = sanitizePhoneInput(e.target.value)
+    handleBlur(e)
   }
 
   function handlePasswordChange(e) {
@@ -228,9 +242,10 @@ export default function BecomeAVolunteer() {
           />
           <Field
             label="Phone number" name="phone" placeholder="07XXXXXXXX" required
+            inputMode="tel" maxLength={PHONE_MAX_LENGTH}
             inputRef={el => (fieldRefs.current.phone = el)}
             error={shouldShow('phone') ? errors.phone : ''}
-            onBlur={handleBlur} onChange={handleChange}
+            onBlur={handlePhoneBlur} onChange={handlePhoneChange}
           />
           <div />
           <PasswordField

@@ -3,6 +3,7 @@ import VolunteerShell from '../../components/volunteer/VolunteerShell'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { apiFetch } from '../../lib/api'
 import { VOLUNTEER_STATUS_LABELS, VOLUNTEER_STATUS_STYLES } from '../../lib/volunteerStatus'
+import { isValidKenyanPhone, PHONE_ERROR_MESSAGE, PHONE_MAX_LENGTH, sanitizePhoneInput } from '../../lib/validation'
 
 const STATUS_COPY = {
   Pending: 'Your profile is awaiting review by KDCCE staff. You can update your details below any time while you wait — approval-only features (home visits, assistance requests) stay locked until an admin approves your application.',
@@ -15,6 +16,7 @@ export default function MyVolunteerProfile({ showToast }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [phoneError, setPhoneError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -26,11 +28,24 @@ export default function MyVolunteerProfile({ showToast }) {
 
   useEffect(() => { load() }, [load])
 
+  function handlePhoneChange(e) {
+    e.target.value = sanitizePhoneInput(e.target.value)
+    if (phoneError) setPhoneError('')
+  }
+  function handlePhoneBlur(e) {
+    const value = sanitizePhoneInput(e.target.value)
+    e.target.value = value
+    setPhoneError(value && !isValidKenyanPhone(value) ? PHONE_ERROR_MESSAGE : '')
+  }
+
   async function save(e) {
     e.preventDefault()
     const f = new FormData(e.target)
+    const phone = f.get('phone') || null
+    if (phone && !isValidKenyanPhone(phone)) { setPhoneError(PHONE_ERROR_MESSAGE); return }
+    setPhoneError('')
     const data = {
-      phone: f.get('phone') || null,
+      phone,
       skills: f.get('skills') || null,
       availability: f.get('availability') || null,
       areas_of_interest: f.get('areas_of_interest') || null,
@@ -58,7 +73,16 @@ export default function MyVolunteerProfile({ showToast }) {
 
       <form onSubmit={save} className="card-k mt-6 grid gap-4 p-6">
         <h2 className="font-display text-lg font-bold text-kGreen">Your details</h2>
-        <label className="text-sm font-semibold">Phone<input name="phone" defaultValue={profile.phone || ''} className="input-k mt-2" /></label>
+        <label className="text-sm font-semibold">Phone
+          <input
+            name="phone" defaultValue={profile.phone || ''} placeholder="07XXXXXXXX"
+            inputMode="tel" maxLength={PHONE_MAX_LENGTH}
+            className={`input-k mt-2 ${phoneError ? 'border-red-400' : ''}`}
+            onChange={handlePhoneChange} onBlur={handlePhoneBlur}
+            aria-invalid={!!phoneError}
+          />
+          {phoneError && <p role="alert" className="mt-1.5 text-xs font-semibold text-red-600">{phoneError}</p>}
+        </label>
         <label className="text-sm font-semibold">Skills<textarea name="skills" defaultValue={profile.skills || ''} rows={2} className="input-k mt-2" placeholder="e.g. First aid, cooking, transport" /></label>
         <label className="text-sm font-semibold">Availability<textarea name="availability" defaultValue={profile.availability || ''} rows={2} className="input-k mt-2" placeholder="e.g. Weekday mornings" /></label>
         <label className="text-sm font-semibold">Areas of interest<textarea name="areas_of_interest" defaultValue={profile.areas_of_interest || ''} rows={2} className="input-k mt-2" placeholder="e.g. Elderly care, home visits, companionship" /></label>
