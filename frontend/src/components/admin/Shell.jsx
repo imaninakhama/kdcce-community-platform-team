@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
-import { Activity, Boxes, CalendarDays, ClipboardCheck, FileImage, Gauge, HandHeart, Heart, HeartPulse, HeartHandshake, Home, Inbox, KeyRound, LayoutDashboard, ListChecks, LogOut, Menu, Pill, ShieldAlert, UserRound, Users, Utensils, X } from 'lucide-react'
+import {
+  Activity, BarChart3, Boxes, CalendarDays, ChevronDown, ClipboardCheck, FileImage, Gauge, HandHeart, Heart,
+  HeartPulse, HeartHandshake, Home, Inbox, KeyRound, LayoutDashboard, ListChecks, LogOut, Menu, Pill, ShieldAlert,
+  UserRound, Users, Utensils, X,
+} from 'lucide-react'
 import ThemeToggle from '../../theme/ThemeToggle'
 import NotificationBell from './NotificationBell'
 import GlobalSearch from './GlobalSearch'
@@ -13,39 +17,73 @@ import { getStoredUser, endSession } from '../../lib/api'
 // AdminLogin redirects a volunteer straight to /volunteer, which has its
 // own separate shell (components/volunteer/VolunteerShell.jsx) and its
 // own approval gate (pages/VolunteerPortal.jsx).
-const staffMenu = [
-  ['Overview', '/admin', 'LayoutDashboard'],
-  ['Analytics', '/admin/analytics', 'Gauge'],
-  ['Elderly Members', '/admin/elderly', 'UserRound'],
-  ['Attendance', '/admin/attendance', 'ClipboardCheck'],
-  ['Health & Wellness', '/admin/health', 'HeartPulse'],
-  ['Medication', '/admin/medication', 'Pill'],
-  ['Volunteers', '/admin/volunteers', 'HeartHandshake'],
-  ['Home Visits', '/admin/home-visits', 'Home'],
-  ['Feeding', '/admin/feeding', 'Utensils'],
-  ['Inventory', '/admin/inventory', 'Boxes'],
-  ['Activities', '/admin/activities', 'Activity'],
-  ['Assistance Requests', '/admin/assistance', 'HandHeart'],
-  ['Incidents', '/admin/incidents', 'ShieldAlert'],
-  ['Follow-ups', '/admin/followups', 'ListChecks'],
-  ['Calendar', '/admin/calendar', 'CalendarDays'],
-  ['Donations', '/admin/donations', 'Heart'],
-  ['Gallery', '/admin/gallery', 'FileImage'],
-  ['Team', '/admin/team', 'Users'],
-  ['Inbox', '/admin/inbox', 'Inbox'],
+//
+// Grouped into the sections an operations/investor demo expects instead
+// of one long flat list — group ids are used as the collapse-state key,
+// so renaming a group's `label` later won't reset anyone's saved
+// collapse/expand preference.
+const NAV_GROUPS = [
+  { id: 'overview', label: 'Overview', items: [
+    ['Dashboard', '/admin', 'LayoutDashboard'],
+    ['Analytics', '/admin/analytics', 'Gauge'],
+    ['Impact & Reports', '/admin/impact', 'BarChart3'],
+  ] },
+  { id: 'people', label: 'People', items: [
+    ['Elderly Members', '/admin/elderly', 'UserRound'],
+    ['Volunteers', '/admin/volunteers', 'HeartHandshake'],
+    ['Staff / Team', '/admin/team', 'Users'],
+  ] },
+  { id: 'care', label: 'Care & Programs', items: [
+    ['Home Visits', '/admin/home-visits', 'Home'],
+    ['Health & Wellness', '/admin/health', 'HeartPulse'],
+    ['Medication', '/admin/medication', 'Pill'],
+    ['Feeding', '/admin/feeding', 'Utensils'],
+    ['Activities', '/admin/activities', 'Activity'],
+    ['Attendance', '/admin/attendance', 'ClipboardCheck'],
+  ] },
+  { id: 'operations', label: 'Operations', items: [
+    ['Assistance Requests', '/admin/assistance', 'HandHeart'],
+    ['Incidents', '/admin/incidents', 'ShieldAlert'],
+    ['Follow-ups', '/admin/followups', 'ListChecks'],
+    ['Inventory', '/admin/inventory', 'Boxes'],
+    ['Calendar', '/admin/calendar', 'CalendarDays'],
+  ] },
+  { id: 'fundraising', label: 'Fundraising & Content', items: [
+    ['Donations', '/admin/donations', 'Heart'],
+    ['Gallery', '/admin/gallery', 'FileImage'],
+    ['Inbox', '/admin/inbox', 'Inbox'],
+  ] },
 ]
 // Admin only — a staff account must never even see the link, not just be
 // blocked by the backend (which independently enforces this too; see
 // roles_required("admin") on app/users/routes.py).
-const adminOnlyMenu = [
+const SYSTEM_GROUP = { id: 'system', label: 'System', items: [
   ['Admin & Staff Accounts', '/admin/users', 'KeyRound'],
-]
-const icons = { LayoutDashboard, Heart, HeartPulse, HeartHandshake, Home, Pill, FileImage, Users, Inbox, UserRound, ClipboardCheck, Utensils, Boxes, Activity, HandHeart, ShieldAlert, Gauge, ListChecks, CalendarDays, KeyRound }
+] }
 
-function NavGroup({ label, items, activeLinkRef, isActiveTo, onNavigate }) {
-  return <div>
-    <div className="px-3 pb-2 pt-5 text-[11px] font-bold uppercase tracking-widest text-kLime first:pt-0">{label}</div>
-    <nav className="grid gap-1 px-2">
+const icons = {
+  LayoutDashboard, Heart, HeartPulse, HeartHandshake, Home, Pill, FileImage, Users, Inbox, UserRound, ClipboardCheck,
+  Utensils, Boxes, Activity, HandHeart, ShieldAlert, Gauge, ListChecks, CalendarDays, KeyRound, BarChart3,
+}
+
+const COLLAPSE_KEY = 'kdcce-admin-nav-collapsed'
+function loadCollapsed() {
+  try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') } catch { return {} }
+}
+
+function NavGroup({ id, label, items, activeLinkRef, isActiveTo, onNavigate, collapsed, onToggle }) {
+  const isOpen = !collapsed[id]
+  return <div className="px-2">
+    <button
+      type="button"
+      onClick={() => onToggle(id)}
+      className="flex w-full items-center justify-between rounded-lg px-2 pb-1.5 pt-4 text-[11px] font-bold uppercase tracking-widest text-white/35 transition hover:text-white/60 first:pt-0"
+      aria-expanded={isOpen}
+    >
+      {label}
+      <ChevronDown size={13} className={`transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+    </button>
+    {isOpen && <nav className="grid gap-0.5">
       {items.map(([itemLabel, to, icon]) => {
         const Icon = icons[icon]
         const active = isActiveTo(to)
@@ -55,10 +93,10 @@ function NavGroup({ label, items, activeLinkRef, isActiveTo, onNavigate }) {
           to={to}
           ref={active ? activeLinkRef : null}
           onClick={onNavigate}
-          className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active ? 'bg-white text-kGreen' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}
-        ><Icon size={17} />{itemLabel}</NavLink>
+          className={`nav-item ${active ? 'is-active' : ''}`}
+        ><Icon size={16} />{itemLabel}</NavLink>
       })}
-    </nav>
+    </nav>}
   </div>
 }
 
@@ -83,16 +121,28 @@ export default function Shell({ children }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   useEffect(() => { setMobileNavOpen(false) }, [pathname])
 
+  // Per-group collapse state, persisted so a returning admin's chosen
+  // layout (e.g. collapsing "Fundraising & Content" if they never touch
+  // it) survives a reload — purely a display preference, nothing server
+  // side depends on it.
+  const [collapsed, setCollapsed] = useState(loadCollapsed)
+  function toggleGroup(id) {
+    setCollapsed(prev => {
+      const next = { ...prev, [id]: !prev[id] }
+      try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next)) } catch { /* best effort */ }
+      return next
+    })
+  }
+
   const firstName = user?.name?.split(' ')[0]
   const initials = user?.name ? user.name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() : ''
 
   return <div className="min-h-screen bg-kCream lg:flex">
     {mobileNavOpen && <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMobileNavOpen(false)} />}
 
-    {/* Sidebar — same dark navy + kLime section labels + kGreen active
-        state the volunteer portal's sidebar already uses, just with the
-        full staff/admin menu grouped into Main/Admin sections instead of
-        the volunteer's flat list. */}
+    {/* Sidebar — dark navy with grouped, collapsible sections. Active
+        state is a subtle dark fill + a blue indicator bar (see .nav-item
+        in index.css), not a bright white pill. */}
     <aside className={`fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col overflow-y-auto bg-[#071724] text-white transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}>
       <div className="flex items-center gap-3 px-4 py-5">
         <Link to="/admin" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white p-1.5"><img src="/images/logo.png" alt="KDCCE" className="h-full w-full object-contain" /></Link>
@@ -103,11 +153,13 @@ export default function Shell({ children }) {
         <button onClick={() => setMobileNavOpen(false)} className="ml-auto shrink-0 text-white/60 hover:text-white lg:hidden" aria-label="Close menu"><X size={20} /></button>
       </div>
 
-      <NavGroup label="Main" items={staffMenu} activeLinkRef={activeLinkRef} isActiveTo={isActiveTo} onNavigate={() => setMobileNavOpen(false)} />
-      {user?.role === 'admin' && <NavGroup label="Admin" items={adminOnlyMenu} activeLinkRef={activeLinkRef} isActiveTo={isActiveTo} onNavigate={() => setMobileNavOpen(false)} />}
+      <div className="flex-1 pb-2">
+        {NAV_GROUPS.map(group => <NavGroup key={group.id} {...group} activeLinkRef={activeLinkRef} isActiveTo={isActiveTo} onNavigate={() => setMobileNavOpen(false)} collapsed={collapsed} onToggle={toggleGroup} />)}
+        {user?.role === 'admin' && <NavGroup {...SYSTEM_GROUP} activeLinkRef={activeLinkRef} isActiveTo={isActiveTo} onNavigate={() => setMobileNavOpen(false)} collapsed={collapsed} onToggle={toggleGroup} />}
+      </div>
 
-      <div className="mt-auto px-2 pb-4 pt-5">
-        <Link to="/" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-white/50 hover:bg-white/10 hover:text-white"><LogOut size={16} /> Back to website</Link>
+      <div className="px-2 pb-4 pt-2">
+        <Link to="/" className="nav-item text-white/50"><LogOut size={16} /> Back to website</Link>
       </div>
     </aside>
 
@@ -127,7 +179,7 @@ export default function Shell({ children }) {
           </div>
           <div className="flex items-center gap-1">
             <GlobalSearch variant="light" />
-            <NotificationBell />
+            <NotificationBell variant="light" />
             <ThemeToggle />
             <div className="ml-1 flex items-center gap-2 border-l border-kBorderSoft pl-3">
               {user && <>

@@ -1,9 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
-import { BarChart3, Heart, Plus, Trash2 } from 'lucide-react'
+import {
+  AlertCircle, AlertTriangle, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, Heart, HeartHandshake,
+  Home as HomeIcon, ListChecks, Plus, ShieldAlert, Sparkles, Trash2, TrendingUp, UserRound, Utensils,
+} from 'lucide-react'
 import Modal from '../components/admin/Modal'
 import Toast from '../components/admin/Toast'
 import Shell from '../components/admin/Shell'
+import PageHeader from '../components/shared/PageHeader'
+import KpiCard from '../components/shared/KpiCard'
+import StatusBadge from '../components/shared/StatusBadge'
+import EmptyState from '../components/shared/EmptyState'
+import SectionCard from '../components/shared/SectionCard'
+import Row from '../components/shared/Row'
 import { useToast, errorMessage, LoadingState, ErrorState } from '../components/admin/adminHelpers'
 import { useApiResource } from '../lib/useApiResource'
 import { apiFetch, clearSession, getStoredUser, getToken, uploadFile } from '../lib/api'
@@ -23,48 +32,144 @@ import ActivityManager from './admin/ActivityManager'
 import AssistanceManager from './admin/AssistanceManager'
 import IncidentManager from './admin/IncidentManager'
 import AnalyticsManager from './admin/AnalyticsManager'
+import ImpactReports from './admin/ImpactReports'
 import InboxManager from './admin/InboxManager'
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
-function StatCard({ a, b, c }) { return <div className="card-k p-5"><div className="text-sm text-kMuted">{a}</div><div className="mt-2 font-display text-3xl font-bold text-kGreen">{b}</div><div className="mt-2 text-xs font-semibold text-kOrange">{c}</div></div> }
-
 // The one figure the dashboard leads with — deliberately heavier than
-// the plain StatCards next to it (filled kGreen background, bigger
-// number) so it reads as the headline, not just one more tile in the
-// grid. Value/subtext are passed in already computed by Overview.
+// the KpiCards next to it (filled kGreen/blue background, bigger number)
+// so it reads as the headline, not just one more tile in the grid.
 function TotalDonationsCard({ amount, donorCount }) {
   return <div className="rounded-2xl bg-kGreen p-5 text-white shadow-soft dark:shadow-none">
-    <div className="flex items-center gap-2 text-sm text-white/75"><Heart size={15} className="fill-current" /> Total Donations</div>
+    <div className="flex items-center gap-2 text-sm text-white/75"><Heart size={15} className="fill-current" /> Confirmed donations (this month)</div>
     <div className="mt-2 font-display text-4xl font-bold">KES {amount.toLocaleString()}</div>
     <div className="mt-2 text-xs font-semibold text-kLime">{donorCount} confirmed {donorCount === 1 ? 'donor' : 'donors'}</div>
   </div>
 }
 
-function frequencyLabel(freq) { return freq === 'monthly' ? 'Monthly' : 'One-time' }
+function fmtDateTime(iso) { return iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—' }
+function isThisMonth(iso) { const d = new Date(iso), n = new Date(); return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() }
 
+// Every figure here comes straight from GET /api/analytics/dashboard
+// (already aggregated server-side, see app/analytics/routes.py) plus the
+// donations list this route already fetches — no new endpoints, no
+// client-side guessing at numbers the backend doesn't provide.
 function Overview({ donations }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const user = getStoredUser()
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('')
+    try { setData((await apiFetch('/api/analytics/dashboard')).dashboard) }
+    catch (err) { setError(errorMessage(err)) }
+    finally { setLoading(false) }
+  }, [])
+  useEffect(() => { load() }, [load])
+
   // Only a confirmed-successful payment counts toward a money total —
   // Pending (still waiting on the M-Pesa callback) and Failed
   // (declined/cancelled/timed out) are real rows that must never be
-  // summed in as received money. In-kind (Food/Equipment) donations
-  // never go through this at all: donation_type === 'Cash' is what
-  // "amount" means a real payment here, matching the same definition
-  // used server-side (see cash_total in app/reports/routes.py).
-  const paidCash = donations.filter(d => d.donation_type === 'Cash' && d.status === 'Paid')
-  const total = paidCash.reduce((s, d) => s + Number(d.amount), 0)
-  const stats = [['This month', `KES ${total.toLocaleString()}`, `${paidCash.length} donors`]]
-  const recent = [...donations].sort((a, b) => b.id - a.id).slice(0, 4)
+  // summed in as received money — same rule as DonationsManager and the
+  // server-side cash_total in app/reports/routes.py.
+  const paidCashThisMonth = donations.filter(d => d.donation_type === 'Cash' && d.status === 'Paid' && isThisMonth(d.created_at))
+  const totalThisMonth = paidCashThisMonth.reduce((s, d) => s + Number(d.amount), 0)
+  const recentDonations = [...donations].sort((a, b) => b.id - a.id).slice(0, 4)
+
+  const firstName = user?.name?.split(' ')[0]
+
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><div className="eyebrow">Overview</div><h1 className="font-display text-3xl font-bold text-kGreen">Good morning, staff.</h1></div><Link to="/admin/donations" className="btn-orange"><Plus size={16} /> Add donation</Link></div>
-    <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <TotalDonationsCard amount={total} donorCount={paidCash.length} />
-      {stats.map(([a, b, c]) => <StatCard key={a} a={a} b={b} c={c} />)}
-    </div>
-    <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
-      <div className="card-k min-w-0 p-6"><div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold text-kGreen">Recent donations</h2><Link to="/admin/donations" className="text-sm font-semibold text-kOrange">View all</Link></div><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead className="border-b border-kBorderSoft text-xs uppercase tracking-wider text-kMuted"><tr><th className="pb-3">Donor</th><th>Amount</th><th>Frequency</th><th>Status</th><th>Date</th></tr></thead><tbody>{recent.map(r => <tr key={r.id} className="border-b border-kBorderSoft"><td className="py-4 font-semibold text-kInk">{r.donor_name}</td><td className="text-kMuted">KES {Number(r.amount).toLocaleString()}</td><td className="text-kMuted">{frequencyLabel(r.frequency)}</td><td className="text-kMuted">{r.status}</td><td className="text-kMuted">{r.created_at.slice(0, 10)}</td></tr>)}</tbody></table></div></div>
-      <div className="card-k p-6"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-kTint text-kOrange"><BarChart3 /></div><div><h2 className="font-display text-xl font-bold text-kGreen">Impact pulse</h2><p className="text-sm text-kMuted">Donations this week</p></div></div><div className="mt-8 flex h-36 items-end justify-between gap-3">{[42, 66, 49, 80, 58, 72, 91].map((v, i) => <div key={i} className="flex flex-1 flex-col items-center gap-2"><div className="w-full rounded-t-lg bg-kOrange/75" style={{ height: `${v}%` }} /><span className="text-[10px] text-kMuted">{['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}</span></div>)}</div></div>
-    </div>
+    <PageHeader
+      eyebrow="Executive overview"
+      title={`Good morning${firstName ? `, ${firstName}` : ''}.`}
+      subtitle="Here's how KDCCE is doing today."
+      actions={<>
+        <Link to="/admin/impact" className="btn-green"><TrendingUp size={16} /> Impact &amp; Reports</Link>
+        <Link to="/admin/donations" className="btn-orange"><Plus size={16} /> Add donation</Link>
+      </>}
+    />
+
+    {loading ? <LoadingState label="dashboard" /> : error ? <ErrorState message={error} onRetry={load} /> : <>
+      <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <TotalDonationsCard amount={totalThisMonth} donorCount={paidCashThisMonth.length} />
+        <KpiCard icon={UserRound} label="Elderly members supported" value={data.elderly_care.total_elderly_members.toLocaleString()} sub={`${data.elderly_care.new_registrations_30d} new in 30 days`} tone="primary" />
+        <KpiCard icon={HeartHandshake} label="Active volunteers" value={data.home_community.active_volunteers.toLocaleString()} sub={`${data.volunteer_performance.completion_rate}% assignment completion`} tone="primary" />
+        <KpiCard icon={ShieldAlert} label="Open incidents" value={data.incidents.open.toLocaleString()} sub={data.incidents.critical_open > 0 ? `${data.incidents.critical_open} critical` : 'None critical'} tone={data.incidents.open > 0 ? 'danger' : 'success'} />
+      </div>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard icon={ClipboardCheck} label="Today's attendance" value={data.elderly_care.today_attendance.toLocaleString()} tone="success" />
+        <KpiCard icon={ListChecks} label="Pending follow-ups" value={data.follow_ups.pending.toLocaleString()} sub={data.follow_ups.overdue > 0 ? `${data.follow_ups.overdue} overdue` : 'None overdue'} tone={data.follow_ups.overdue > 0 ? 'danger' : 'warning'} />
+        <KpiCard icon={Utensils} label="Meals served (7d)" value={data.feeding_resources.meals_served_7d.toLocaleString()} tone="neutral" />
+        <KpiCard icon={Boxes} label="Low stock items" value={data.feeding_resources.low_stock_items.toLocaleString()} tone={data.feeding_resources.low_stock_items > 0 ? 'warning' : 'success'} />
+      </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
+        <div className="grid gap-6">
+          <SectionCard title="Needs attention">
+            {(() => {
+              const items = [
+                data.incidents.critical_open > 0 && { icon: AlertCircle, tone: 'danger', title: `${data.incidents.critical_open} critical incident${data.incidents.critical_open > 1 ? 's' : ''} open`, subtitle: 'Immediate review required', to: '/admin/incidents' },
+                data.incidents.open > data.incidents.critical_open && { icon: ShieldAlert, tone: 'warning', title: `${data.incidents.open - data.incidents.critical_open} other open incident${(data.incidents.open - data.incidents.critical_open) > 1 ? 's' : ''}`, subtitle: 'Needs follow-up', to: '/admin/incidents' },
+                data.follow_ups.overdue > 0 && { icon: ListChecks, tone: 'danger', title: `${data.follow_ups.overdue} overdue follow-up${data.follow_ups.overdue > 1 ? 's' : ''}`, subtitle: 'Past their due date', to: '/admin/followups' },
+                data.feeding_resources.low_stock_items > 0 && { icon: Boxes, tone: 'warning', title: `${data.feeding_resources.low_stock_items} item${data.feeding_resources.low_stock_items > 1 ? 's' : ''} at or below minimum stock`, subtitle: 'Restock soon', to: '/admin/inventory' },
+                data.home_community.home_visits_pending > 0 && { icon: HomeIcon, tone: 'warning', title: `${data.home_community.home_visits_pending} home visit${data.home_community.home_visits_pending > 1 ? 's' : ''} awaiting assignment`, subtitle: 'Not yet assigned to a volunteer', to: '/admin/home-visits' },
+              ].filter(Boolean)
+              if (items.length === 0) return <EmptyState icon={CheckCircle2} tone="success" title="All caught up" message="Nothing needs attention right now." />
+              return items.map(item => <Link key={item.title} to={item.to} className="block hover:bg-kTint/40 -mx-2 rounded-lg px-2"><Row icon={item.icon} tone={item.tone} title={item.title} subtitle={item.subtitle} right={<StatusBadge tone={item.tone}>Review</StatusBadge>} /></Link>)
+            })()}
+          </SectionCard>
+
+          <SectionCard title="Recent activity">
+            {(() => {
+              const entries = [
+                ...data.today_activity.attendance.map(a => ({ icon: ClipboardCheck, tone: 'success', title: a.elderly_member_name, subtitle: `Checked in ${fmtDateTime(a.check_in_at)}` })),
+                ...data.today_activity.home_visits.map(v => ({ icon: HomeIcon, tone: 'primary', title: v.elderly_member_name, subtitle: `Home visit — ${v.status}` })),
+                ...data.today_activity.assistance_requests.map(r => ({ icon: HeartHandshake, tone: 'primary', title: r.elderly_member_name, subtitle: `Assistance request — ${r.status}` })),
+                ...data.today_activity.health_observations.map(h => ({ icon: AlertTriangle, tone: 'neutral', title: h.elderly_member_name, subtitle: `Health observation — ${h.wellbeing || 'recorded'}` })),
+              ]
+              if (entries.length === 0) return <p className="text-sm text-kMuted">No activity recorded yet today.</p>
+              return entries.slice(0, 8).map((e, i) => <Row key={i} {...e} />)
+            })()}
+          </SectionCard>
+
+          <SectionCard title="Upcoming work" action={<Link to="/admin/calendar" className="text-sm font-semibold text-kGreen">View calendar</Link>}>
+            {(() => {
+              const items = [
+                ...data.upcoming_visits.upcoming.map(v => ({ icon: HomeIcon, tone: 'primary', title: v.elderly_member_name, subtitle: `Home visit · ${v.assigned_to || 'Unassigned'}`, when: v.scheduled_at })),
+                ...data.activities.upcoming.map(a => ({ icon: CalendarClock, tone: 'accent', title: a.title, subtitle: a.activity_type, when: a.scheduled_at })),
+              ].sort((a, b) => new Date(a.when) - new Date(b.when))
+              if (items.length === 0) return <p className="text-sm text-kMuted">Nothing scheduled yet.</p>
+              return items.slice(0, 6).map((e, i) => <Row key={i} icon={e.icon} tone={e.tone} title={e.title} subtitle={e.subtitle} right={<span className="shrink-0 text-xs text-kMuted">{fmtDateTime(e.when)}</span>} />)
+            })()}
+          </SectionCard>
+        </div>
+
+        <div className="grid gap-6">
+          <SectionCard title="Program activity" action={<Link to="/admin/analytics" className="text-sm font-semibold text-kGreen">Full analytics</Link>}>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-kBorderSoft p-4"><div className="text-xs text-kMuted">Activities (30d)</div><div className="mt-1 font-display text-xl font-bold text-kInk">{data.activities.attended_30d}</div></div>
+              <div className="rounded-xl bg-kBorderSoft p-4"><div className="text-xs text-kMuted">Medication (7d)</div><div className="mt-1 font-display text-xl font-bold text-kInk">{data.health.medication_administrations_7d}</div></div>
+              <div className="rounded-xl bg-kBorderSoft p-4"><div className="text-xs text-kMuted">Health checks (30d)</div><div className="mt-1 font-display text-xl font-bold text-kInk">{data.health.health_checks_30d}</div></div>
+              <div className="rounded-xl bg-kBorderSoft p-4"><div className="text-xs text-kMuted">Inventory moves (7d)</div><div className="mt-1 font-display text-xl font-bold text-kInk">{data.feeding_resources.inventory_movements_7d}</div></div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Donations & impact" action={<Link to="/admin/donations" className="text-sm font-semibold text-kGreen">View all</Link>}>
+            <div className="flex items-center gap-3 rounded-xl bg-kBorderSoft p-4"><Sparkles size={18} className="shrink-0 text-kOrange" /><p className="text-sm text-kInk">{data.feeding_resources.donations_30d} donation{data.feeding_resources.donations_30d === 1 ? '' : 's'} logged in the last 30 days.</p></div>
+            <div className="mt-4 grid gap-2">
+              {recentDonations.map(r => <div key={r.id} className="flex items-center justify-between gap-3 border-b border-kBorderSoft py-2.5 text-sm last:border-0">
+                <div className="min-w-0"><div className="truncate font-semibold text-kInk">{r.donor_name}</div><div className="text-xs text-kMuted">{r.created_at.slice(0, 10)}</div></div>
+                <StatusBadge tone={r.status === 'Paid' || r.status === 'Received' ? 'success' : r.status === 'Failed' ? 'danger' : 'warning'}>{r.status}</StatusBadge>
+              </div>)}
+              {recentDonations.length === 0 && <p className="text-sm text-kMuted">No donations logged yet.</p>}
+            </div>
+          </SectionCard>
+        </div>
+      </div>
+    </>}
   </Shell>
 }
 
@@ -93,7 +198,7 @@ function GalleryManager({ images, loading, error, reload, deleteImage, showToast
   }
 
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Gallery manager</h1></div><button onClick={() => setModal({})} className="btn-orange"><Plus size={16} /> Add Photo</button></div>
+    <PageHeader eyebrow="Fundraising & content" title="Gallery" subtitle="Photos shown on the public site." actions={<button onClick={() => setModal({})} className="btn-orange"><Plus size={16} /> Add Photo</button>} />
     {loading ? <LoadingState label="images" /> : error ? <ErrorState message={error} onRetry={reload} /> : <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{images.map(img => <div key={img.id} className="group relative overflow-hidden rounded-2xl"><img src={img.url} alt="" className="h-48 w-full object-cover" /><button onClick={() => remove(img)} className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100"><Trash2 size={16} /></button></div>)}
       {images.length === 0 && <p className="text-sm text-kMuted">No images yet — add one to get started.</p>}
     </div>}
@@ -128,7 +233,7 @@ function TeamManager({ team, loading, error, reload, addMember, patchMember, del
   }
 
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Team manager</h1></div><button onClick={() => setModal({})} className="btn-orange"><Plus size={16} /> Add team member</button></div>
+    <PageHeader eyebrow="People" title="Staff / Team" subtitle="Team profiles shown on the public site." actions={<button onClick={() => setModal({})} className="btn-orange"><Plus size={16} /> Add team member</button>} />
     {loading ? <LoadingState label="team" /> : error ? <ErrorState message={error} onRetry={reload} /> : <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{team.map(t => <div key={t.id} className="card-k overflow-hidden"><img src={t.image} alt={t.name} className="h-44 w-full object-cover" /><div className="p-5"><h3 className="font-display text-lg font-semibold text-kGreen">{t.name}</h3><p className="mt-1 text-sm text-kMuted">{t.role}</p><div className="mt-4 flex gap-3"><button onClick={() => setModal({ data: t })} className="text-sm font-semibold text-kOrange">Edit</button><button onClick={() => remove(t)} className="text-sm font-semibold text-kMuted hover:text-red-600">Remove</button></div></div></div>)}
     </div>}
     {modal && <Modal title={modal.data ? 'Edit team member' : 'Add team member'} onClose={() => setModal(null)}>
@@ -163,7 +268,7 @@ function UsersManager({ users, loading, error, reload, addUser, deleteUser, show
   }
 
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Admin &amp; staff accounts</h1></div><button onClick={() => setModal(true)} className="btn-orange"><Plus size={16} /> Add account</button></div>
+    <PageHeader eyebrow="System" title="Admin & staff accounts" subtitle="Who can sign in to the staff workspace." actions={<button onClick={() => setModal(true)} className="btn-orange"><Plus size={16} /> Add account</button>} />
     {loading ? <LoadingState label="accounts" /> : error ? <ErrorState message={error} onRetry={reload} /> : <div className="mt-7 overflow-x-auto card-k"><table className="w-full min-w-[500px] text-left text-sm"><thead className="border-b border-kBorderSoft text-xs uppercase tracking-wider text-kMuted"><tr><th className="p-4">Name</th><th>Email</th><th>Role</th><th></th></tr></thead><tbody>{users.map(u => <tr key={u.id} className="border-b border-kBorderSoft"><td className="p-4 font-semibold text-kInk">{u.name}</td><td className="text-kMuted">{u.email}</td><td className="text-kMuted capitalize">{u.role}</td><td className="p-4 text-right">{u.id !== currentUserId && <button onClick={() => remove(u)} className="text-sm font-semibold text-kMuted hover:text-red-600">Remove</button>}</td></tr>)}
       {users.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-sm text-kMuted">No other admin/staff accounts yet.</td></tr>}
     </tbody></table></div>}
@@ -213,6 +318,7 @@ function AdminDashboardRoutes() {
       <Route path="assistance" element={<AssistanceManager showToast={showToast} />} />
       <Route path="incidents" element={<IncidentManager showToast={showToast} />} />
       <Route path="analytics" element={<AnalyticsManager />} />
+      <Route path="impact" element={<ImpactReports />} />
       <Route path="gallery" element={<GalleryManager
         images={galleryApi.items} loading={galleryApi.loading} error={galleryApi.error} reload={galleryApi.reload}
         deleteImage={id => galleryApi.remove(id, '/api/admin/gallery')}

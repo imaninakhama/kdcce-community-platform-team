@@ -1,5 +1,9 @@
-import { NavLink, Link, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, User, Home, HandHeart, Bell, Users, History, TrendingUp, MessageSquare, AlertTriangle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
+import {
+  AlertTriangle, Bell as BellIcon, Home as HomeIcon, ListChecks, LogOut, Menu, MessageSquare, Sparkles,
+  TrendingUp, User, Users, X,
+} from 'lucide-react'
 import ThemeToggle from '../../theme/ThemeToggle'
 import NotificationBell from '../admin/NotificationBell'
 import { getStoredUser, endSession } from '../../lib/api'
@@ -10,28 +14,89 @@ import { getStoredUser, endSession } from '../../lib/api'
 // admin dashboard — see VolunteerPortal.jsx for the approval gate that
 // decides whether a volunteer ever reaches this shell at all. Only
 // volunteer-relevant nav here — never the admin/staff management menu.
+// Simplified to the 9 items a volunteer actually needs, flat (no groups
+// — nine items doesn't need them), matching the same dark-sidebar /
+// light-header structure as the admin Shell for a consistent product feel.
 const menu = [
-  ['Dashboard', '/volunteer', 'LayoutDashboard'],
-  ['My Home Visits', '/volunteer/home-visits', 'Home'],
-  ['Assistance Requests', '/volunteer/assistance', 'HandHeart'],
-  ['My Elderly Members', '/volunteer/elderly-members', 'Users'],
-  ['My Activity', '/volunteer/activity', 'History'],
-  ['My Performance', '/volunteer/performance', 'TrendingUp'],
+  ['Home', '/volunteer', 'HomeIcon'],
+  ['My Assignments', '/volunteer/assignments', 'ListChecks'],
+  ['People I Support', '/volunteer/people', 'Users'],
+  ['Opportunities', '/volunteer/opportunities', 'Sparkles'],
   ['Messages', '/volunteer/messages', 'MessageSquare'],
+  ['Notifications', '/volunteer/notifications', 'BellIcon'],
+  ['My Impact', '/volunteer/impact', 'TrendingUp'],
+  ['Profile', '/volunteer/profile', 'User'],
   ['Report a Concern', '/volunteer/report-concern', 'AlertTriangle'],
-  ['Notifications', '/volunteer/notifications', 'Bell'],
-  ['My Profile', '/volunteer/profile', 'User'],
 ]
-const icons = { LayoutDashboard, User, Home, HandHeart, Bell, Users, History, TrendingUp, MessageSquare, AlertTriangle }
+const icons = { HomeIcon, ListChecks, Users, Sparkles, MessageSquare, BellIcon, TrendingUp, User, AlertTriangle }
 
 export default function VolunteerShell({ children }) {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const user = getStoredUser()
   async function signOut() { await endSession(); navigate('/admin/login') }
-  // No min-h, and items-start instead of grid's default align-items:
-  // stretch — the sidebar's dark box must end at its own content (nav
-  // items + padding after Sign out), never stretched to match main
-  // content's height, however long that gets. Same fix as
-  // components/admin/Shell.jsx.
-  return <div className="bg-kCream"><div className="container-k grid items-start gap-6 py-8 lg:grid-cols-[230px_1fr]"><aside className="rounded-2xl bg-[#071724] p-4 text-white"><div className="mb-5 rounded-2xl bg-white px-3 py-3"><img src="/images/logo.png" alt="KDCCE" className="h-14 w-auto max-w-[185px] object-contain object-left" /></div><div className="mb-4 flex items-center justify-between gap-2 px-3"><div><div className="text-xs font-semibold uppercase tracking-widest text-kLime">Volunteer portal</div>{user && <div className="mt-1 text-xs text-white/60">{user.name}</div>}</div><div className="flex items-center gap-1"><NotificationBell variant="dark" /><ThemeToggle variant="dark" /></div></div><nav className="grid gap-1">{menu.map(([label, to, icon]) => { const Icon = icons[icon]; return <NavLink end={to === '/volunteer'} key={to} to={to} className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${isActive ? 'bg-white text-kGreen' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}><Icon size={17} />{label}</NavLink> })}</nav><Link to="/" className="mt-6 flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-white/70 hover:bg-white/10">Back to website</Link><button onClick={signOut} className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-white/70 hover:bg-white/10">Sign out</button></aside><section>{children}</section></div></div>
+  function isActiveTo(to) { return to === '/volunteer' ? pathname === '/volunteer' : pathname.startsWith(to) }
+
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  useEffect(() => { setMobileNavOpen(false) }, [pathname])
+
+  const firstName = user?.name?.split(' ')[0]
+  const initials = user?.name ? user.name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() : ''
+
+  return <div className="min-h-screen bg-kCream lg:flex">
+    {mobileNavOpen && <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMobileNavOpen(false)} />}
+
+    <aside className={`fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col overflow-y-auto bg-[#071724] text-white transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className="flex items-center gap-3 px-4 py-5">
+        <Link to="/volunteer" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white p-1.5"><img src="/images/logo.png" alt="KDCCE" className="h-full w-full object-contain" /></Link>
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-widest text-kLime">Volunteer portal</div>
+          <div className="truncate font-display text-base font-bold leading-tight">{user?.name || 'Volunteer'}</div>
+        </div>
+        <button onClick={() => setMobileNavOpen(false)} className="ml-auto shrink-0 text-white/60 hover:text-white lg:hidden" aria-label="Close menu"><X size={20} /></button>
+      </div>
+
+      <nav className="grid gap-0.5 px-2">
+        {menu.map(([label, to, icon]) => {
+          const Icon = icons[icon]
+          const active = isActiveTo(to)
+          return <NavLink end={to === '/volunteer'} key={to} to={to} onClick={() => setMobileNavOpen(false)} className={`nav-item ${active ? 'is-active' : ''}`}><Icon size={16} />{label}</NavLink>
+        })}
+      </nav>
+
+      <div className="mt-auto px-2 pb-4 pt-5">
+        <Link to="/" className="nav-item text-white/50"><LogOut size={16} /> Back to website</Link>
+      </div>
+    </aside>
+
+    <div className="min-w-0 flex-1">
+      <header className="sticky top-0 z-30 border-b border-kBorderSoft bg-kSurface">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <button onClick={() => setMobileNavOpen(true)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-kMuted hover:bg-kTint hover:text-kInk lg:hidden" aria-label="Open menu"><Menu size={20} /></button>
+            <div className="min-w-0">
+              <div className="truncate font-display text-lg font-bold text-kInk">Welcome back{firstName ? `, ${firstName}` : ''}</div>
+              <div className="truncate text-xs text-kMuted">Here's what's happening with your assignments.</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <NotificationBell variant="light" />
+            <ThemeToggle />
+            <div className="ml-1 flex items-center gap-2 border-l border-kBorderSoft pl-3">
+              {user && <>
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-kGreen text-xs font-bold text-white">{initials}</div>
+                <div className="hidden text-right sm:block">
+                  <div className="text-sm font-semibold leading-tight text-kInk">{user.name}</div>
+                  <div className="text-xs capitalize text-kMuted">Volunteer</div>
+                </div>
+              </>}
+              <button onClick={signOut} title="Sign out" aria-label="Sign out" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-kMuted hover:bg-kTint hover:text-kOrange"><LogOut size={17} /></button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="container-k py-8"><section>{children}</section></main>
+    </div>
+  </div>
 }

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { Search, Plus, AlertTriangle } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import Modal from '../../components/admin/Modal'
+import PageHeader from '../../components/shared/PageHeader'
+import StatusBadge from '../../components/shared/StatusBadge'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { apiFetch } from '../../lib/api'
 
@@ -84,10 +86,10 @@ export default function HealthManager({ showToast }) {
   }
 
   return <Shell>
-    <div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Health &amp; wellness</h1></div>
+    <PageHeader eyebrow="Care & programs" title="Health & wellness" subtitle="Observations, vitals, and follow-ups." />
 
-    {followUps.length > 0 && <div className="card-k mt-7 border-l-4 border-l-kOrange p-5">
-      <div className="flex items-center gap-2 text-kOrange"><AlertTriangle size={18} /><h2 className="font-display text-lg font-bold">Needs follow-up ({followUps.length})</h2></div>
+    {followUps.length > 0 && <div className="card-k mt-7 border-l-4 border-l-kDanger p-5">
+      <div className="flex items-center gap-2 text-kDanger"><AlertTriangle size={18} /><h2 className="font-display text-lg font-bold">Needs follow-up ({followUps.length})</h2></div>
       <div className="mt-3 grid gap-2">
         {followUps.map(r => <button key={r.id} onClick={() => { const m = members.find(x => x.id === r.elderly_member_id); if (m) selectMember(m) }} className="flex items-center justify-between rounded-xl border border-kBorder px-4 py-2 text-left text-sm hover:bg-kCream">
           <span className="font-semibold text-kInk">{r.elderly_member_name} <span className="font-normal text-kMuted">({r.elderly_member_code})</span></span>
@@ -113,7 +115,7 @@ export default function HealthManager({ showToast }) {
         <button onClick={() => setModalOpen(true)} className="btn-green"><Plus size={16} /> Record observation</button>
       </div>
       {recordsLoading ? <LoadingState label="observations" /> : error ? <ErrorState message={error} onRetry={() => loadRecords(selected.id)} /> : <div className="overflow-x-auto"><table className="w-full min-w-[800px] text-left text-sm"><thead className="bg-kBorderSoft text-xs uppercase tracking-wider text-kMuted"><tr><th className="px-5 py-4">Date</th><th className="px-5 py-4">BP</th><th className="px-5 py-4">Pulse</th><th className="px-5 py-4">Temp</th><th className="px-5 py-4">Weight</th><th className="px-5 py-4">Wellbeing</th><th className="px-5 py-4">Follow-up</th></tr></thead><tbody>
-        {records.map(r => <tr key={r.id} className="border-b border-kBorderSoft"><td className="px-5 py-4 text-kMuted">{fmt(r.recorded_at)}</td><td className="px-5 py-4 text-kMuted">{r.blood_pressure_systolic ? `${r.blood_pressure_systolic}/${r.blood_pressure_diastolic}` : '—'}</td><td className="px-5 py-4 text-kMuted">{r.pulse_bpm ?? '—'}</td><td className="px-5 py-4 text-kMuted">{r.temperature_celsius ?? '—'}</td><td className="px-5 py-4 text-kMuted">{r.weight_kg ?? '—'}</td><td className="px-5 py-4 text-kMuted">{r.wellbeing ?? '—'}</td><td className="px-5 py-4">{r.follow_up_required ? <span className="rounded-full bg-kTint px-3 py-1 text-xs font-bold text-kOrange">Required</span> : '—'}</td></tr>)}
+        {records.map(r => <tr key={r.id} className="border-b border-kBorderSoft"><td className="px-5 py-4 text-kMuted">{fmt(r.recorded_at)}</td><td className="px-5 py-4 text-kMuted">{r.blood_pressure_systolic ? `${r.blood_pressure_systolic}/${r.blood_pressure_diastolic}` : '—'}</td><td className="px-5 py-4 text-kMuted">{r.pulse_bpm ?? '—'}</td><td className="px-5 py-4 text-kMuted">{r.temperature_celsius ?? '—'}</td><td className="px-5 py-4 text-kMuted">{r.weight_kg ?? '—'}</td><td className="px-5 py-4 text-kMuted">{r.wellbeing ?? '—'}</td><td className="px-5 py-4">{r.follow_up_required ? <StatusBadge tone="danger">Required</StatusBadge> : '—'}</td></tr>)}
         {records.length === 0 && <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-kMuted">No observations recorded yet.</td></tr>}
       </tbody></table></div>}
     </div>}

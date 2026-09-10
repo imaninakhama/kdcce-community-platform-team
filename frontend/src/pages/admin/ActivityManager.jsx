@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { Search, Plus, Users } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import Modal from '../../components/admin/Modal'
+import PageHeader from '../../components/shared/PageHeader'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { apiFetch } from '../../lib/api'
 
 const ACTIVITY_TYPES = ['Exercise', 'Walking', 'Games', 'Social', 'Intergenerational', 'Skills Training', 'Educational', 'Community Event', 'Other']
 const STATUSES = ['Scheduled', 'In Progress', 'Completed', 'Cancelled']
 const PARTICIPANT_STATUSES = ['Registered', 'Attended', 'No-show', 'Cancelled']
-const PARTICIPANT_STYLES = { Registered: 'bg-kBorderSoft text-kMuted', Attended: 'bg-kGreen/10 text-kGreen', 'No-show': 'bg-red-100 text-red-700', Cancelled: 'bg-kBorderSoft text-kMuted' }
+const PARTICIPANT_STYLES = { Registered: 'bg-kBorderSoft text-kMuted', Attended: 'bg-kSuccess/10 text-kSuccess', 'No-show': 'bg-kDanger/10 text-kDanger', Cancelled: 'bg-kBorderSoft text-kMuted' }
 
 function fmt(iso) { return new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) }
 function toLocalInput(iso) { return iso ? new Date(iso).toISOString().slice(0, 16) : '' }
@@ -141,10 +142,7 @@ export default function ActivityManager({ showToast }) {
   useEffect(() => { load() }, [load])
 
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-      <div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Activities</h1></div>
-      <button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> Create activity</button>
-    </div>
+    <PageHeader eyebrow="Care & programs" title="Activities" subtitle="Programs, sessions, and participation." actions={<button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> Create activity</button>} />
 
     <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_1.1fr]">
       <div>
@@ -154,9 +152,9 @@ export default function ActivityManager({ showToast }) {
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="flex-1 rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-sm text-kInk"><option>All</option>{STATUSES.map(s => <option key={s}>{s}</option>)}</select>
           </div>
           {loading ? <LoadingState label="activities" /> : error ? <ErrorState message={error} onRetry={load} /> : <div className="grid gap-2 p-4">
-            {activities.map(a => <button key={a.id} onClick={() => setSelected(a)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left ${selected?.id === a.id ? 'border-kOrange bg-kTint' : 'border-kBorder hover:bg-kCream'}`}>
+            {activities.map(a => <button key={a.id} onClick={() => setSelected(a)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left ${selected?.id === a.id ? 'border-kGreen bg-kGreen/5' : 'border-kBorder hover:bg-kCream'}`}>
               <div><div className="font-semibold text-kInk">{a.title}</div><div className="text-xs text-kMuted">{a.activity_type} &middot; {fmt(a.scheduled_at)}</div></div>
-              <div className="flex items-center gap-1 text-xs font-bold text-kOrange"><Users size={14} /> {a.participant_count}</div>
+              <div className="flex items-center gap-1 text-xs font-bold text-kGreen"><Users size={14} /> {a.participant_count}</div>
             </button>)}
             {activities.length === 0 && <p className="p-4 text-center text-sm text-kMuted">No activities match your filters.</p>}
           </div>}

@@ -21,6 +21,9 @@
   --k-muted: 102 116 125;
   --k-accent-blue: 0 104 169;
   --k-accent-pink: 192 0 89;
+  --k-success: 21 128 61;
+  --k-warning: 180 83 9;
+  --k-danger: 185 28 28;
 }
 
 .dark {
@@ -34,6 +37,9 @@
   --k-muted: 148 163 176;
   --k-accent-blue: 100 190 245;
   --k-accent-pink: 255 111 168;
+  --k-success: 74 222 128;
+  --k-warning: 251 191 36;
+  --k-danger: 248 113 113;
 }
 
 :root {
@@ -124,7 +130,39 @@ img { display: block; }
     --k-muted: 102 116 125;
     --k-accent-blue: 0 104 169;
     --k-accent-pink: 192 0 89;
+    --k-success: 21 128 61;
+    --k-warning: 180 83 9;
+    --k-danger: 185 28 28;
   }
+}
+
+/* Sidebar nav item — subtle dark active state with a blue indicator bar,
+ * replacing the old bright-white active pill (design-system rule: no
+ * bright fills for nav state, blue marks "this is where you are"). */
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  border-radius: .65rem;
+  padding: .6rem .75rem .6rem .8rem;
+  font-size: .875rem;
+  font-weight: 600;
+  color: rgb(255 255 255 / .55);
+  transition: background-color .15s ease, color .15s ease;
+}
+.nav-item:hover { background: rgb(255 255 255 / .06); color: rgb(255 255 255 / .92); }
+.nav-item.is-active { background: rgb(255 255 255 / .08); color: #fff; }
+.nav-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: -.5rem;
+  top: 50%;
+  height: 1.25rem;
+  width: 3px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: #4EA8F5;
 }
 
 /*

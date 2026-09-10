@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Search, Plus, Users } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import Modal from '../../components/admin/Modal'
+import PageHeader from '../../components/shared/PageHeader'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { apiFetch } from '../../lib/api'
 
@@ -120,10 +121,7 @@ export default function FeedingManager({ showToast }) {
   useEffect(() => { load() }, [load])
 
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-      <div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Feeding</h1></div>
-      <button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> Plan meal</button>
-    </div>
+    <PageHeader eyebrow="Care & programs" title="Feeding" subtitle="Meal plans and attendance." actions={<button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> Plan meal</button>} />
 
     <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_1.1fr]">
       <div>
@@ -133,9 +131,9 @@ export default function FeedingManager({ showToast }) {
             <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-sm text-kInk"><option>All</option>{MEAL_TYPES.map(t => <option key={t}>{t}</option>)}</select>
           </div>
           {loading ? <LoadingState label="meals" /> : error ? <ErrorState message={error} onRetry={load} /> : <div className="grid gap-2 p-4">
-            {meals.map(m => <button key={m.id} onClick={() => setSelected(m)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left ${selected?.id === m.id ? 'border-kOrange bg-kTint' : 'border-kBorder hover:bg-kCream'}`}>
+            {meals.map(m => <button key={m.id} onClick={() => setSelected(m)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left ${selected?.id === m.id ? 'border-kGreen bg-kGreen/5' : 'border-kBorder hover:bg-kCream'}`}>
               <div><div className="font-semibold text-kInk">{m.meal_type}</div><div className="text-xs text-kMuted">{m.meal_date}{m.description ? ` · ${m.description}` : ''}</div></div>
-              <div className="flex items-center gap-1 text-xs font-bold text-kOrange"><Users size={14} /> {m.attendee_count}</div>
+              <div className="flex items-center gap-1 text-xs font-bold text-kGreen"><Users size={14} /> {m.attendee_count}</div>
             </button>)}
             {meals.length === 0 && <p className="p-4 text-center text-sm text-kMuted">No meals planned for this filter.</p>}
           </div>}

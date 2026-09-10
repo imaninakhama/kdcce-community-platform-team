@@ -1,15 +1,15 @@
 import { useState } from 'react'
-import { Search, Check, X as XIcon } from 'lucide-react'
+import { Check, X as XIcon } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import Modal from '../../components/admin/Modal'
+import PageHeader from '../../components/shared/PageHeader'
+import StatusBadge from '../../components/shared/StatusBadge'
+import FilterBar from '../../components/shared/FilterBar'
+import DataTable from '../../components/shared/DataTable'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { useApiResource } from '../../lib/useApiResource'
 
-const STATUS_STYLES = {
-  Pending: 'bg-kTint text-kOrange',
-  Verified: 'bg-kGreen/10 text-kGreen',
-  Rejected: 'bg-red-100 text-red-700',
-}
+const STATUS_TONE = { Pending: 'warning', Verified: 'success', Rejected: 'danger' }
 
 function Field({ label, value }) {
   if (!value) return null
@@ -49,7 +49,7 @@ function ReviewModal({ volunteer, onClose, onDecide, showToast }) {
 
   return <Modal title="Volunteer application" onClose={onClose}>
     <div className="grid gap-4">
-      <div className="flex items-center justify-between"><div><div className="font-display text-lg font-bold text-kGreen">{volunteer.name}</div><div className="text-sm text-kMuted">{volunteer.email}{volunteer.phone ? ` · ${volunteer.phone}` : ''}</div></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLES[volunteer.status]}`}>{volunteer.status}</span></div>
+      <div className="flex items-center justify-between"><div><div className="font-display text-lg font-bold text-kGreen">{volunteer.name}</div><div className="text-sm text-kMuted">{volunteer.email}{volunteer.phone ? ` · ${volunteer.phone}` : ''}</div></div><StatusBadge tone={STATUS_TONE[volunteer.status]}>{volunteer.status}</StatusBadge></div>
 
       <Field label="Skills" value={volunteer.skills} />
       <Field label="Availability" value={volunteer.availability} />
@@ -87,17 +87,24 @@ export default function VolunteerManager({ showToast }) {
   )
 
   return <Shell>
-    <div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Volunteer Applications</h1></div>
+    <PageHeader eyebrow="People" title="Volunteer applications" subtitle="Review, approve, and manage volunteer applications." />
 
     {volunteersApi.loading ? <LoadingState label="volunteers" /> : volunteersApi.error ? <ErrorState message={volunteersApi.error} onRetry={volunteersApi.reload} /> : <div className="card-k mt-7 overflow-hidden">
-      <div className="flex flex-col gap-3 border-b border-kBorderSoft p-5 sm:flex-row">
-        <div className="relative flex-1"><Search className="absolute left-3 top-3.5 text-kMuted" size={17} /><input value={q} onChange={e => setQ(e.target.value)} className="input-k pl-10" placeholder="Search name or email..." /></div>
+      <FilterBar value={q} onChange={setQ} placeholder="Search name or email...">
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-sm text-kInk"><option>All</option><option>Pending</option><option>Verified</option><option>Rejected</option></select>
-      </div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[800px] text-left text-sm"><thead className="bg-kBorderSoft text-xs uppercase tracking-wider text-kMuted"><tr><th className="px-5 py-4">Name</th><th className="px-5 py-4">Contact</th><th className="px-5 py-4">Skills</th><th className="px-5 py-4">Availability</th><th className="px-5 py-4">Status</th><th className="px-5 py-4">Action</th></tr></thead><tbody>
-        {filtered.map(v => <tr key={v.id} className="border-b border-kBorderSoft"><td className="px-5 py-4 font-semibold text-kInk">{v.name}</td><td className="px-5 py-4 text-kMuted">{v.email}{v.phone ? ` · ${v.phone}` : ''}</td><td className="px-5 py-4 text-kMuted">{v.skills || '—'}</td><td className="px-5 py-4 text-kMuted">{v.availability || '—'}</td><td className="px-5 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLES[v.status]}`}>{v.status}</span></td><td className="px-5 py-4"><button onClick={() => setReviewing(v)} className="text-xs font-bold text-kOrange">{v.status === 'Pending' ? 'Review' : 'View'}</button></td></tr>)}
-        {filtered.length === 0 && <tr><td colSpan={6} className="px-5 py-10 text-center text-sm text-kMuted">No volunteers match your search.</td></tr>}
-      </tbody></table></div>
+      </FilterBar>
+      <DataTable
+        emptyMessage="No volunteers match your search."
+        columns={[
+          { key: 'name', header: 'Name', cell: v => <span className="font-semibold text-kInk">{v.name}</span> },
+          { key: 'contact', header: 'Contact', cell: v => <span className="text-kMuted">{v.email}{v.phone ? ` · ${v.phone}` : ''}</span> },
+          { key: 'skills', header: 'Skills', cell: v => <span className="text-kMuted">{v.skills || '—'}</span> },
+          { key: 'availability', header: 'Availability', cell: v => <span className="text-kMuted">{v.availability || '—'}</span> },
+          { key: 'status', header: 'Status', cell: v => <StatusBadge tone={STATUS_TONE[v.status]}>{v.status}</StatusBadge> },
+          { key: 'action', header: 'Action', cell: v => <button onClick={() => setReviewing(v)} className="text-xs font-bold text-kGreen">{v.status === 'Pending' ? 'Review' : 'View'}</button> },
+        ]}
+        rows={filtered}
+      />
     </div>}
 
     {reviewing && <ReviewModal volunteer={reviewing} onClose={() => setReviewing(null)} onDecide={(id, data) => volunteersApi.patch(id, data)} showToast={showToast} />}

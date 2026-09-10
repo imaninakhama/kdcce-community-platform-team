@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, AlertCircle, AreaChart, Calendar, ClipboardCheck, Home, TrendingUp, Activity } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
+import PageHeader from '../../components/shared/PageHeader'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { apiFetch } from '../../lib/api'
 
 function StatTile({ label, value, tone = 'default' }) {
-  const toneClass = tone === 'warn' ? 'text-kOrange' : tone === 'danger' ? 'text-red-600' : 'text-kGreen'
+  const toneClass = tone === 'warn' ? 'text-kWarning' : tone === 'danger' ? 'text-kDanger' : 'text-kGreen'
   return <div className="card-k p-5"><div className="text-sm text-kMuted">{label}</div><div className={`mt-2 font-display text-3xl font-bold ${toneClass}`}>{value}</div></div>
 }
 
@@ -42,13 +43,13 @@ export default function AnalyticsManager() {
   useEffect(() => { load() }, [load])
 
   return <Shell>
-    <div><div className="eyebrow">Management intelligence</div><h1 className="font-display text-3xl font-bold text-kGreen">Analytics dashboard</h1></div>
+    <PageHeader eyebrow="Overview" title="Analytics" subtitle="Rolling day-to-day operational metrics." />
 
     {loading ? <LoadingState label="dashboard" /> : error ? <ErrorState message={error} onRetry={load} /> : <>
-      {data.incidents.critical_open > 0 && <div className="mt-6 flex items-center gap-2 rounded-xl border-l-4 border-l-red-600 bg-red-50 px-5 py-3 text-sm font-bold text-red-700 dark:bg-red-500/10"><AlertCircle size={16} /> {data.incidents.critical_open} open CRITICAL incident{data.incidents.critical_open > 1 ? 's' : ''} — immediate attention required</div>}
-      {data.incidents.open > 0 && <div className="mt-3 flex items-center gap-2 rounded-xl border-l-4 border-l-red-500 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 dark:bg-red-500/10"><AlertCircle size={16} /> {data.incidents.open} open incident{data.incidents.open > 1 ? 's' : ''} need attention</div>}
-      {data.follow_ups.overdue > 0 && <div className="mt-3 flex items-center gap-2 rounded-xl border-l-4 border-l-kOrange bg-kTint px-5 py-3 text-sm font-semibold text-kOrange"><ClipboardCheck size={16} /> {data.follow_ups.overdue} overdue follow-up{data.follow_ups.overdue > 1 ? 's' : ''}</div>}
-      {data.feeding_resources.low_stock_items > 0 && <div className="mt-3 flex items-center gap-2 rounded-xl border-l-4 border-l-kOrange bg-kTint px-5 py-3 text-sm font-semibold text-kOrange"><AlertTriangle size={16} /> {data.feeding_resources.low_stock_items} item{data.feeding_resources.low_stock_items > 1 ? 's' : ''} at or below minimum stock</div>}
+      {data.incidents.critical_open > 0 && <div className="mt-6 flex items-center gap-2 rounded-xl border-l-4 border-l-kDanger bg-kDanger/10 px-5 py-3 text-sm font-bold text-kDanger"><AlertCircle size={16} /> {data.incidents.critical_open} open CRITICAL incident{data.incidents.critical_open > 1 ? 's' : ''} — immediate attention required</div>}
+      {data.incidents.open > 0 && <div className="mt-3 flex items-center gap-2 rounded-xl border-l-4 border-l-kDanger bg-kDanger/10 px-5 py-3 text-sm font-semibold text-kDanger"><AlertCircle size={16} /> {data.incidents.open} open incident{data.incidents.open > 1 ? 's' : ''} need attention</div>}
+      {data.follow_ups.overdue > 0 && <div className="mt-3 flex items-center gap-2 rounded-xl border-l-4 border-l-kWarning bg-kWarning/10 px-5 py-3 text-sm font-semibold text-kWarning"><ClipboardCheck size={16} /> {data.follow_ups.overdue} overdue follow-up{data.follow_ups.overdue > 1 ? 's' : ''}</div>}
+      {data.feeding_resources.low_stock_items > 0 && <div className="mt-3 flex items-center gap-2 rounded-xl border-l-4 border-l-kWarning bg-kWarning/10 px-5 py-3 text-sm font-semibold text-kWarning"><AlertTriangle size={16} /> {data.feeding_resources.low_stock_items} item{data.feeding_resources.low_stock_items > 1 ? 's' : ''} at or below minimum stock</div>}
 
       <Section title="Elderly Care">
         <StatTile label="Total elderly members" value={data.elderly_care.total_elderly_members} />
@@ -102,19 +103,19 @@ export default function AnalyticsManager() {
         {data.incidents.recent.map(i => <div key={i.id} className="flex items-center justify-between border-b border-kBorderSoft px-5 py-3 text-sm last:border-0"><span className="font-semibold text-kInk">{i.elderly_member_name}</span><span className="text-kMuted">{i.incident_type}</span><span className="text-xs font-bold uppercase text-kOrange">{i.status}</span></div>)}
       </div>}
 
-      <div className="mt-8 flex items-center justify-between"><h2 className="font-display text-xl font-bold text-kGreen">Follow-ups</h2><Link to="/admin/followups" className="text-sm font-semibold text-kOrange">Manage follow-ups</Link></div>
+      <div className="mt-8 flex items-center justify-between"><h2 className="font-display text-xl font-bold text-kGreen">Follow-ups</h2><Link to="/admin/followups" className="text-sm font-semibold text-kGreen">Manage follow-ups</Link></div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Pending follow-ups" value={data.follow_ups.pending} tone={data.follow_ups.pending > 0 ? 'warn' : 'default'} />
         <StatTile label="Overdue follow-ups" value={data.follow_ups.overdue} tone={data.follow_ups.overdue > 0 ? 'danger' : 'default'} />
       </div>
 
-      <div className="mt-8 flex items-center justify-between"><h2 className="font-display text-xl font-bold text-kGreen">Upcoming Visits</h2><Link to="/admin/calendar" className="text-sm font-semibold text-kOrange">View calendar</Link></div>
+      <div className="mt-8 flex items-center justify-between"><h2 className="font-display text-xl font-bold text-kGreen">Upcoming Visits</h2><Link to="/admin/calendar" className="text-sm font-semibold text-kGreen">View calendar</Link></div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><StatTile label="Scheduled, not yet done" value={data.upcoming_visits.count} /></div>
       {data.upcoming_visits.upcoming.length > 0 && <div className="card-k mt-5 overflow-hidden">
         {data.upcoming_visits.upcoming.map(v => <div key={v.id} className="flex items-center gap-3 border-b border-kBorderSoft px-5 py-3 text-sm last:border-0"><Home size={15} className="text-kOrange" /><span className="font-semibold text-kInk">{v.elderly_member_name}</span><span className="text-kMuted">{v.assigned_to || 'Unassigned'} &middot; {new Date(v.scheduled_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span></div>)}
       </div>}
 
-      <div className="mt-8 flex items-center justify-between"><h2 className="font-display text-xl font-bold text-kGreen">Volunteer Performance</h2><Link to="/admin/volunteers" className="text-sm font-semibold text-kOrange">View volunteers</Link></div>
+      <div className="mt-8 flex items-center justify-between"><h2 className="font-display text-xl font-bold text-kGreen">Volunteer Performance</h2><Link to="/admin/volunteers" className="text-sm font-semibold text-kGreen">View volunteers</Link></div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Active volunteers" value={data.volunteer_performance.active_volunteers} />
         <StatTile label="Total assignments" value={data.volunteer_performance.total_assignments} />

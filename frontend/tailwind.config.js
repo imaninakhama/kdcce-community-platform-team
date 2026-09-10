@@ -21,7 +21,14 @@ export default {
         kSurface: 'rgb(var(--k-surface) / <alpha-value>)',
         kTint: 'rgb(var(--k-tint) / <alpha-value>)',
         kBorder: 'rgb(var(--k-border) / <alpha-value>)',
-        kBorderSoft: 'rgb(var(--k-border-soft) / <alpha-value>)'
+        kBorderSoft: 'rgb(var(--k-border-soft) / <alpha-value>)',
+        // Semantic status colors — distinct from the brand fills above.
+        // kGreen is actually blue (primary) and kOrange is actually hot
+        // pink (accent only), so real green/amber/red live here for
+        // success/warning/danger states across both themes.
+        kSuccess: 'rgb(var(--k-success) / <alpha-value>)',
+        kWarning: 'rgb(var(--k-warning) / <alpha-value>)',
+        kDanger: 'rgb(var(--k-danger) / <alpha-value>)'
       },
       boxShadow: {
         soft: '0 8px 30px rgba(0,104,169,.09)'

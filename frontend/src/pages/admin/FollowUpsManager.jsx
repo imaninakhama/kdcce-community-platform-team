@@ -2,13 +2,16 @@ import { useState, useEffect, useCallback } from 'react'
 import { Search, Plus, Pencil, AlertTriangle } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import Modal from '../../components/admin/Modal'
+import PageHeader from '../../components/shared/PageHeader'
+import StatusBadge from '../../components/shared/StatusBadge'
+import DataTable from '../../components/shared/DataTable'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { apiFetch } from '../../lib/api'
 
 const STATUSES = ['Pending', 'In Progress', 'Completed']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent']
-const PRIORITY_STYLES = { Low: 'bg-kBorderSoft text-kMuted', Medium: 'bg-kTint text-kOrange', High: 'bg-orange-100 text-orange-700', Urgent: 'bg-red-100 text-red-700' }
-const STATUS_STYLES = { Pending: 'bg-kTint text-kOrange', 'In Progress': 'bg-kGreen/10 text-kGreen', Completed: 'bg-kBorderSoft text-kMuted' }
+const PRIORITY_TONE = { Low: 'neutral', Medium: 'info', High: 'warning', Urgent: 'danger' }
+const STATUS_TONE = { Pending: 'warning', 'In Progress': 'info', Completed: 'success' }
 const SOURCE_LABELS = { health_record: 'Health', home_visit: 'Home Visit', assistance_request: 'Assistance', incident: 'Incident', manual: 'Manual' }
 
 function NewFollowUpModal({ assignees, onClose, onCreated, showToast }) {
@@ -125,12 +128,9 @@ export default function FollowUpsManager({ showToast }) {
   const overdueCount = followups.filter(f => f.is_overdue).length
 
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-      <div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Follow-ups</h1></div>
-      <button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> New follow-up</button>
-    </div>
+    <PageHeader eyebrow="Operations" title="Follow-ups" subtitle="Action items generated from health, visits, and incidents." actions={<button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> New follow-up</button>} />
 
-    {overdueCount > 0 && <div className="mt-6 flex items-center gap-2 rounded-xl border-l-4 border-l-red-500 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 dark:bg-red-500/10"><AlertTriangle size={16} /> {overdueCount} overdue follow-up{overdueCount > 1 ? 's' : ''}</div>}
+    {overdueCount > 0 && <div className="mt-6 flex items-center gap-2 rounded-xl border-l-4 border-l-kDanger bg-kDanger/10 px-5 py-3 text-sm font-semibold text-kDanger"><AlertTriangle size={16} /> {overdueCount} overdue follow-up{overdueCount > 1 ? 's' : ''}</div>}
 
     {loading ? <LoadingState label="follow-ups" /> : error ? <ErrorState message={error} onRetry={load} /> : <div className="card-k mt-7 overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-kBorderSoft p-5 sm:flex-row">
@@ -138,10 +138,20 @@ export default function FollowUpsManager({ showToast }) {
         <label className="flex items-center gap-2 whitespace-nowrap rounded-xl border border-kBorder px-4 text-sm font-semibold text-kInk"><input type="checkbox" checked={overdueOnly} onChange={e => setOverdueOnly(e.target.checked)} className="h-4 w-4" /> Overdue only</label>
         <div className="ml-auto flex items-center text-sm text-kMuted">{pendingCount} pending</div>
       </div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left text-sm"><thead className="bg-kBorderSoft text-xs uppercase tracking-wider text-kMuted"><tr><th className="px-5 py-4">Member</th><th className="px-5 py-4">Source</th><th className="px-5 py-4">Reason</th><th className="px-5 py-4">Priority</th><th className="px-5 py-4">Assigned</th><th className="px-5 py-4">Due</th><th className="px-5 py-4">Status</th><th className="px-5 py-4">Actions</th></tr></thead><tbody>
-        {followups.map(f => <tr key={f.id} className="border-b border-kBorderSoft"><td className="px-5 py-4"><div className="font-semibold text-kInk">{f.elderly_member_name}</div><div className="text-xs text-kMuted">{f.elderly_member_code}</div></td><td className="px-5 py-4 text-kMuted">{SOURCE_LABELS[f.source_type]}</td><td className="px-5 py-4 text-kMuted max-w-[220px] truncate">{f.reason}</td><td className="px-5 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${PRIORITY_STYLES[f.priority]}`}>{f.priority}</span></td><td className="px-5 py-4 text-kMuted">{f.assigned_to || 'Unassigned'}</td><td className="px-5 py-4 text-kMuted">{f.due_date ? <span className={f.is_overdue ? 'font-bold text-red-600' : ''}>{f.due_date}</span> : '—'}</td><td className="px-5 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLES[f.status]}`}>{f.status}</span></td><td className="px-5 py-4"><button onClick={() => setEditFollowup(f)} className="text-kOrange"><Pencil size={16} /></button></td></tr>)}
-        {followups.length === 0 && <tr><td colSpan={8} className="px-5 py-10 text-center text-sm text-kMuted">No follow-ups match your filters.</td></tr>}
-      </tbody></table></div>
+      <DataTable
+        emptyMessage="No follow-ups match your filters."
+        columns={[
+          { key: 'member', header: 'Member', cell: f => <><div className="font-semibold text-kInk">{f.elderly_member_name}</div><div className="text-xs text-kMuted">{f.elderly_member_code}</div></> },
+          { key: 'source', header: 'Source', cell: f => <span className="text-kMuted">{SOURCE_LABELS[f.source_type]}</span> },
+          { key: 'reason', header: 'Reason', cell: f => <span className="max-w-[220px] truncate text-kMuted">{f.reason}</span> },
+          { key: 'priority', header: 'Priority', cell: f => <StatusBadge tone={PRIORITY_TONE[f.priority]}>{f.priority}</StatusBadge> },
+          { key: 'assigned', header: 'Assigned', cell: f => <span className="text-kMuted">{f.assigned_to || 'Unassigned'}</span> },
+          { key: 'due', header: 'Due', cell: f => f.due_date ? <span className={f.is_overdue ? 'font-bold text-kDanger' : 'text-kMuted'}>{f.due_date}</span> : <span className="text-kMuted">—</span> },
+          { key: 'status', header: 'Status', cell: f => <StatusBadge tone={STATUS_TONE[f.status]}>{f.status}</StatusBadge> },
+          { key: 'actions', header: 'Actions', cell: f => <button onClick={() => setEditFollowup(f)} className="text-kGreen"><Pencil size={16} /></button> },
+        ]}
+        rows={followups}
+      />
     </div>}
 
     {newModalOpen && <NewFollowUpModal assignees={assignees} onClose={() => setNewModalOpen(false)} onCreated={async data => { await apiFetch('/api/followups', { method: 'POST', body: data }); load() }} showToast={showToast} />}

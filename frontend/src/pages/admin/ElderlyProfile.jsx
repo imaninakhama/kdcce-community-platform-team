@@ -92,16 +92,16 @@ export default function ElderlyProfile({ showToast }) {
   const openFollowups = followups.filter(f => f.status !== 'Completed').length
 
   return <Shell>
-    <Link to="/admin/elderly" className="flex items-center gap-1 text-sm font-semibold text-kOrange"><ArrowLeft size={15} /> Back to elderly members</Link>
+    <Link to="/admin/elderly" className="flex items-center gap-1 text-sm font-semibold text-kGreen"><ArrowLeft size={15} /> Back to elderly members</Link>
 
     <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
       <div>
-        <h1 className="font-display text-3xl font-bold text-kGreen">{member.full_name}</h1>
+        <h1 className="font-display text-2xl font-bold text-kGreen sm:text-[26px]">{member.full_name}</h1>
         <p className="text-sm text-kMuted">{member.member_id}{member.opa_name ? ` · ${member.opa_name}` : ''}</p>
       </div>
       <div className="flex items-center gap-3">
         <span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLES[member.status]}`}>{member.status}</span>
-        {openFollowups > 0 && <span className="flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700"><AlertTriangle size={13} /> {openFollowups} open follow-up{openFollowups > 1 ? 's' : ''}</span>}
+        {openFollowups > 0 && <span className="flex items-center gap-1 rounded-full bg-kDanger/10 px-3 py-1 text-xs font-bold text-kDanger"><AlertTriangle size={13} /> {openFollowups} open follow-up{openFollowups > 1 ? 's' : ''}</span>}
         {isAdmin && <button onClick={remove} disabled={deleting} className="flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60"><Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete member'}</button>}
       </div>
     </div>

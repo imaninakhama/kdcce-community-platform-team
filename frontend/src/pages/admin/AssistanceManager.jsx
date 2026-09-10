@@ -5,6 +5,9 @@ import Modal from '../../components/admin/Modal'
 import AssignmentPhoto from '../../components/admin/AssignmentPhoto'
 import AssignmentConversation from '../../components/admin/AssignmentConversation'
 import AssignmentReview from '../../components/admin/AssignmentReview'
+import PageHeader from '../../components/shared/PageHeader'
+import StatusBadge from '../../components/shared/StatusBadge'
+import DataTable from '../../components/shared/DataTable'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { useApiResource } from '../../lib/useApiResource'
 import { apiFetch } from '../../lib/api'
@@ -12,7 +15,8 @@ import { apiFetch } from '../../lib/api'
 const TYPES = ['Hospital Accompaniment', 'Transportation', 'Food Assistance', 'Companionship', 'Home Support', 'Other']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent']
 const STATUSES = ['Requested', 'Matching', 'Assigned', 'Accepted', 'Started', 'In Progress', 'Completed', 'Cancelled']
-const PRIORITY_STYLES = { Low: 'bg-kBorderSoft text-kMuted', Medium: 'bg-kTint text-kOrange', High: 'bg-orange-100 text-orange-700', Urgent: 'bg-red-100 text-red-700' }
+const PRIORITY_TONE = { Low: 'neutral', Medium: 'info', High: 'warning', Urgent: 'danger' }
+function statusTone(s) { if (s === 'Completed') return 'success'; if (s === 'Cancelled') return 'danger'; if (['Started', 'In Progress'].includes(s)) return 'info'; return 'warning' }
 
 function NewRequestModal({ assignees, onClose, onCreated, showToast }) {
   const [members, setMembers] = useState([])
@@ -113,20 +117,25 @@ export default function AssistanceManager({ showToast }) {
   )
 
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-      <div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Assistance requests</h1></div>
-      <button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> New request</button>
-    </div>
+    <PageHeader eyebrow="Operations" title="Assistance requests" subtitle="Requests for transport, hospital accompaniment, and other support." actions={<button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> New request</button>} />
 
     {requestsApi.loading ? <LoadingState label="requests" /> : requestsApi.error ? <ErrorState message={requestsApi.error} onRetry={requestsApi.reload} /> : <div className="card-k mt-7 overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-kBorderSoft p-5 sm:flex-row">
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-sm text-kInk"><option>All</option>{STATUSES.map(s => <option key={s}>{s}</option>)}</select>
         <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)} className="rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-sm text-kInk"><option>All</option>{PRIORITIES.map(p => <option key={p}>{p}</option>)}</select>
       </div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-kBorderSoft text-xs uppercase tracking-wider text-kMuted"><tr><th className="px-5 py-4">Member</th><th className="px-5 py-4">Type</th><th className="px-5 py-4">Priority</th><th className="px-5 py-4">Status</th><th className="px-5 py-4">Assigned to</th><th className="px-5 py-4">Actions</th></tr></thead><tbody>
-        {filtered.map(r => <tr key={r.id} className="border-b border-kBorderSoft"><td className="px-5 py-4"><div className="font-semibold text-kInk">{r.elderly_member_name}</div><div className="text-xs text-kMuted">{r.elderly_member_code}</div></td><td className="px-5 py-4 text-kMuted">{r.request_type}</td><td className="px-5 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${PRIORITY_STYLES[r.priority]}`}>{r.priority}</span></td><td className="px-5 py-4 text-kMuted">{r.status}</td><td className="px-5 py-4 text-kMuted">{r.assigned_to || 'Unassigned'}</td><td className="px-5 py-4"><button onClick={() => setEditReq(r)} className="text-kOrange"><Pencil size={16} /></button></td></tr>)}
-        {filtered.length === 0 && <tr><td colSpan={6} className="px-5 py-10 text-center text-sm text-kMuted">No requests match your filters.</td></tr>}
-      </tbody></table></div>
+      <DataTable
+        emptyMessage="No requests match your filters."
+        columns={[
+          { key: 'member', header: 'Member', cell: r => <><div className="font-semibold text-kInk">{r.elderly_member_name}</div><div className="text-xs text-kMuted">{r.elderly_member_code}</div></> },
+          { key: 'type', header: 'Type', cell: r => <span className="text-kMuted">{r.request_type}</span> },
+          { key: 'priority', header: 'Priority', cell: r => <StatusBadge tone={PRIORITY_TONE[r.priority]}>{r.priority}</StatusBadge> },
+          { key: 'status', header: 'Status', cell: r => <StatusBadge tone={statusTone(r.status)}>{r.status}</StatusBadge> },
+          { key: 'assigned', header: 'Assigned to', cell: r => <span className="text-kMuted">{r.assigned_to || 'Unassigned'}</span> },
+          { key: 'actions', header: 'Actions', cell: r => <button onClick={() => setEditReq(r)} className="text-kGreen"><Pencil size={16} /></button> },
+        ]}
+        rows={filtered}
+      />
     </div>}
 
     {newModalOpen && <NewRequestModal assignees={assignees} onClose={() => setNewModalOpen(false)} onCreated={data => requestsApi.create(data)} showToast={showToast} />}

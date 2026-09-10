@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Search, Plus, Check, X as XIcon, MinusCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import Modal from '../../components/admin/Modal'
+import PageHeader from '../../components/shared/PageHeader'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { apiFetch } from '../../lib/api'
 
@@ -121,7 +122,7 @@ export default function MedicationManager({ showToast }) {
   }
 
   return <Shell>
-    <div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Medication</h1></div>
+    <PageHeader eyebrow="Care & programs" title="Medication" subtitle="Prescriptions and dose administration." />
 
     <div className="card-k mt-7 p-6">
       <h2 className="font-display text-lg font-bold text-kGreen">Find a member</h2>

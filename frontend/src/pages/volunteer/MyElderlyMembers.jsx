@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { Users } from 'lucide-react'
 import VolunteerShell from '../../components/volunteer/VolunteerShell'
 import Modal from '../../components/admin/Modal'
+import PageHeader from '../../components/shared/PageHeader'
+import StatusBadge from '../../components/shared/StatusBadge'
+import EmptyState from '../../components/shared/EmptyState'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { useVolunteerData } from '../../lib/VolunteerDataContext'
 import { apiFetch } from '../../lib/api'
@@ -47,7 +50,7 @@ function SnapshotModal({ memberId, onClose }) {
         <div className="text-xs font-bold uppercase tracking-wide text-kMuted">Follow-ups</div>
         {snap.follow_ups.length === 0 ? <p className="mt-2 text-sm text-kMuted">None on record.</p> : <div className="mt-3 grid gap-2">
           {snap.follow_ups.map(f => <div key={f.id} className="rounded-xl border border-kBorderSoft p-3 text-sm">
-            <div className="flex items-center justify-between gap-2"><span className="font-semibold text-kInk">{f.reason}</span><span className={`text-xs font-bold ${f.is_overdue ? 'text-red-600' : 'text-kOrange'}`}>{f.status}{f.is_overdue ? ' · overdue' : ''}</span></div>
+            <div className="flex items-center justify-between gap-2"><span className="font-semibold text-kInk">{f.reason}</span><StatusBadge tone={f.is_overdue ? 'danger' : 'warning'}>{f.status}{f.is_overdue ? ' · overdue' : ''}</StatusBadge></div>
             {f.due_date && <p className="mt-1 text-xs text-kMuted">Due {fmtDate(f.due_date)}</p>}
           </div>)}
         </div>}
@@ -61,18 +64,18 @@ export default function MyElderlyMembers() {
   const [viewId, setViewId] = useState(null)
 
   return <VolunteerShell>
-    <div><div className="eyebrow">My people</div><h1 className="font-display text-3xl font-bold text-kGreen">My Elderly Members</h1></div>
+    <PageHeader eyebrow="My people" title="People I Support" subtitle="Elderly members currently assigned to you." />
 
     {loading ? <LoadingState label="elderly members" /> : error ? <ErrorState message={error} onRetry={reload} /> : <div className="mt-7 grid gap-4 sm:grid-cols-2">
       {elderlyMembers.map(m => <div key={m.id} className="card-k p-5">
-        <div className="flex items-center gap-3"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-kTint text-kOrange"><Users size={18} /></div><div><div className="font-display text-lg font-bold text-kGreen">{m.full_name}</div><div className="text-xs text-kMuted">{m.member_id}</div></div></div>
+        <div className="flex items-center gap-3"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-kGreen/10 text-kGreen"><Users size={18} /></div><div><div className="font-display text-lg font-bold text-kGreen">{m.full_name}</div><div className="text-xs text-kMuted">{m.member_id}</div></div></div>
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
           <div><div className="text-xs font-bold uppercase tracking-wide text-kMuted">Last visit</div><div className="mt-1 text-kInk">{fmtDate(m.last_visit)}</div></div>
           <div><div className="text-xs font-bold uppercase tracking-wide text-kMuted">Next assignment</div><div className="mt-1 text-kInk">{fmtDate(m.next_assignment)}</div></div>
         </div>
-        <button onClick={() => setViewId(m.id)} className="mt-4 text-sm font-bold text-kOrange">View Details</button>
+        <button onClick={() => setViewId(m.id)} className="mt-4 text-sm font-bold text-kGreen">View Details</button>
       </div>)}
-      {elderlyMembers.length === 0 && <div className="card-k p-10 text-center text-sm text-kMuted sm:col-span-2">No elderly members currently assigned to you.</div>}
+      {elderlyMembers.length === 0 && <div className="sm:col-span-2"><EmptyState icon={Users} title="No one assigned yet" message="Elderly members assigned to you will show up here." /></div>}
     </div>}
 
     {viewId && <SnapshotModal memberId={viewId} onClose={() => setViewId(null)} />}
