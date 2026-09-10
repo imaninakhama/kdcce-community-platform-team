@@ -1,140 +1,285 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, AlertCircle, AreaChart, Calendar, ClipboardCheck, Home, TrendingUp, Activity } from 'lucide-react'
+import {
+  AlertTriangle, Activity, Boxes, Calendar, ClipboardCheck, Download, Handshake, Heart, HeartPulse,
+  Home, ListChecks, ShieldAlert, Sparkles, Users, Utensils,
+} from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import PageHeader from '../../components/shared/PageHeader'
+import KpiCard from '../../components/shared/KpiCard'
+import SectionCard from '../../components/shared/SectionCard'
+import StatusBadge from '../../components/shared/StatusBadge'
+import EmptyState from '../../components/shared/EmptyState'
+import Row from '../../components/shared/Row'
+import CollapsibleSection from '../../components/shared/CollapsibleSection'
+import TrendBarChart from '../../components/shared/TrendBarChart'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { apiFetch } from '../../lib/api'
+import { downloadCsv } from '../../lib/csv'
 
-function StatTile({ label, value, tone = 'default' }) {
-  const toneClass = tone === 'warn' ? 'text-kWarning' : tone === 'danger' ? 'text-kDanger' : 'text-kGreen'
-  return <div className="card-k p-5"><div className="text-sm text-kMuted">{label}</div><div className={`mt-2 font-display text-3xl font-bold ${toneClass}`}>{value}</div></div>
+const RANGE_OPTIONS = [
+  { value: 7, label: 'Last 7 days' },
+  { value: 30, label: 'Last 30 days' },
+  { value: 90, label: 'Last 90 days' },
+]
+
+function isoDate(d) { return d.toISOString().slice(0, 10) }
+function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - (n - 1)); return d }
+function monthStart() { const d = new Date(); d.setDate(1); return d }
+function isThisMonth(iso) { const d = new Date(iso), n = new Date(); return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() }
+function hasSeriesData(series) { return !!series && series.some(d => d.count > 0) }
+function fmtDateTime(iso) { return new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) }
+
+// Small compact tile for dense secondary stats inside collapsible
+// sections — deliberately lighter than KpiCard (no icon chip) to keep
+// these grids tight, per the "reduce excessive card height" brief.
+function Stat({ label, value, tone = 'neutral' }) {
+  const toneClass = { neutral: 'text-kInk', danger: 'text-kDanger', warning: 'text-kWarning', success: 'text-kSuccess' }[tone]
+  return <div className="rounded-xl bg-kBorderSoft p-3.5"><div className="text-xs text-kMuted">{label}</div><div className={`mt-1 font-display text-lg font-bold ${toneClass}`}>{value}</div></div>
 }
 
-function Section({ title, children }) {
-  return <div className="mt-8"><h2 className="font-display text-xl font-bold text-kGreen">{title}</h2><div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{children}</div></div>
-}
-
-function TrendChart({ title, series, days }) {
-  if (!series || series.length === 0) return null
-  const max = Math.max(...series.map(d => d.count), 1)
-  const step = days > 7 ? 2 : 1
-  return <div className="card-k mt-5 p-6">
-    <div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-kTint text-kOrange"><AreaChart size={18} /></div><h3 className="font-display text-lg font-bold text-kGreen">{title}</h3></div>
-    <div className="mt-6 flex h-32 items-end justify-between gap-1">
-      {series.map((d, i) => <div key={d.date} className="flex flex-1 flex-col items-center gap-2"><div className="w-full rounded-t-lg bg-kOrange/75" style={{ height: `${Math.max((d.count / max) * 100, 2)}%` }} title={`${d.date}: ${d.count}`} />{i % step === 0 && <span className="text-[9px] text-kMuted">{d.date.slice(5)}</span>}</div>)}
-    </div>
+function HorizontalBar({ label, value, max }) {
+  const pct = Math.max((value / max) * 100, value > 0 ? 3 : 0)
+  return <div>
+    <div className="flex items-center justify-between text-sm"><span className="text-kInk">{label}</span><span className="font-semibold text-kInk">{value.toLocaleString()}</span></div>
+    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-kBorderSoft"><div className="h-full rounded-full bg-kGreen transition-all" style={{ width: `${pct}%` }} /></div>
   </div>
 }
 
+// Every figure here is read straight off existing, unmodified backend
+// endpoints — GET /api/analytics/dashboard for the rolling-window
+// summary, GET /api/reports/home-visits and GET /api/reports/attendance
+// (both already support date_from/date_to) for the two figures that are
+// genuinely period-scoped ("this month" and the trend-range filter), and
+// GET /api/donations (already fetched elsewhere in the app) for this
+// month's confirmed cash total. No new endpoints, no client-side
+// fabrication — a metric with nothing behind it renders a compact empty
+// state instead of a chart drawn from zeros.
 export default function AnalyticsManager() {
   const [data, setData] = useState(null)
+  const [monthlyVisits, setMonthlyVisits] = useState(null)
+  const [monthlyDonations, setMonthlyDonations] = useState({ total: 0, count: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const [rangeDays, setRangeDays] = useState(30)
+  const [trend, setTrend] = useState(null)
+  const [trendLoading, setTrendLoading] = useState(true)
+  const [trendError, setTrendError] = useState('')
+
   const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try { setData((await apiFetch('/api/analytics/dashboard')).dashboard) }
-    catch (err) { setError(errorMessage(err)) }
+    setLoading(true); setError('')
+    try {
+      const today = isoDate(new Date())
+      const mStart = isoDate(monthStart())
+      const [dashboardRes, visitsRes, donationsRes] = await Promise.all([
+        apiFetch('/api/analytics/dashboard'),
+        apiFetch(`/api/reports/home-visits?date_from=${mStart}&date_to=${today}`),
+        apiFetch('/api/donations'),
+      ])
+      setData(dashboardRes.dashboard)
+      setMonthlyVisits(visitsRes.report)
+      const paidThisMonth = donationsRes.donations.filter(d => d.donation_type === 'Cash' && d.status === 'Paid' && isThisMonth(d.created_at))
+      setMonthlyDonations({ total: paidThisMonth.reduce((s, d) => s + Number(d.amount), 0), count: paidThisMonth.length })
+    } catch (err) { setError(errorMessage(err)) }
     finally { setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])
 
+  const loadTrend = useCallback(async (days) => {
+    setTrendLoading(true); setTrendError('')
+    try {
+      const res = await apiFetch(`/api/reports/attendance?date_from=${isoDate(daysAgo(days))}&date_to=${isoDate(new Date())}`)
+      setTrend(res.report)
+    } catch (err) { setTrendError(errorMessage(err)) }
+    finally { setTrendLoading(false) }
+  }, [])
+
+  useEffect(() => { loadTrend(rangeDays) }, [rangeDays, loadTrend])
+
+  const rangeLabel = RANGE_OPTIONS.find(r => r.value === rangeDays)?.label || ''
+
+  function handleExport() {
+    if (!data) return
+    downloadCsv(`analytics-overview-${isoDate(new Date())}.csv`, ['Metric', 'Value'], [
+      ['Total Elderly Members', data.elderly_care.total_elderly_members],
+      ['New Registrations (30d)', data.elderly_care.new_registrations_30d],
+      ['Active Volunteers', data.home_community.active_volunteers],
+      ['Volunteer Completion Rate', `${data.volunteer_performance.completion_rate}%`],
+      ['Home Visits This Month', monthlyVisits?.total ?? 0],
+      ['Donations This Month (KES)', monthlyDonations.total],
+      ['Donations This Month (count)', monthlyDonations.count],
+      ['Meals Served (7d)', data.feeding_resources.meals_served_7d],
+      ['Health Checks (30d)', data.health.health_checks_30d],
+      ['Activities Attended (30d)', data.activities.attended_30d],
+      ['Overdue Follow-ups', data.follow_ups.overdue],
+      ['Open Incidents', data.incidents.open],
+      ['Critical Open Incidents', data.incidents.critical_open],
+      ['Low-stock Items', data.feeding_resources.low_stock_items],
+      ['Pending Assistance Requests', data.home_community.assistance_pending],
+      ['Attendance Trend Period', rangeLabel],
+    ])
+  }
+
+  if (loading) return <Shell><PageHeader eyebrow="Overview" title="Analytics Overview" subtitle="Executive summary of KDCCE's operations." /><LoadingState label="analytics" /></Shell>
+  if (error) return <Shell><PageHeader eyebrow="Overview" title="Analytics Overview" subtitle="Executive summary of KDCCE's operations." /><ErrorState message={error} onRetry={load} /></Shell>
+
+  const programActivity = [
+    { label: 'Home Visits (this month)', value: monthlyVisits?.total ?? 0 },
+    { label: 'Feeding — meals served (7d)', value: data.feeding_resources.meals_served_7d },
+    { label: 'Health checks (30d)', value: data.health.health_checks_30d },
+    { label: 'Activities attended (30d)', value: data.activities.attended_30d },
+  ]
+  const programMax = Math.max(...programActivity.map(p => p.value), 1)
+  const hasProgramActivity = programActivity.some(p => p.value > 0)
+
+  const attentionItems = [
+    { label: 'Overdue follow-ups', value: data.follow_ups.overdue, to: '/admin/followups', icon: ListChecks },
+    { label: 'Open incidents', value: data.incidents.open, to: '/admin/incidents', icon: ShieldAlert },
+    { label: 'Low-stock items', value: data.feeding_resources.low_stock_items, to: '/admin/inventory', icon: Boxes },
+    { label: 'Pending assistance requests', value: data.home_community.assistance_pending, to: '/admin/assistance', icon: Handshake },
+  ].filter(i => i.value > 0)
+
+  const snapshot = [
+    { label: 'Meals served (7d)', value: data.feeding_resources.meals_served_7d },
+    { label: "Today's attendance", value: data.elderly_care.today_attendance },
+    { label: 'Health checks (30d)', value: data.health.health_checks_30d },
+    { label: 'Assistance requests', value: data.home_community.assistance_pending + data.home_community.assistance_completed },
+  ]
+
+  const todayActivityCount = data.today_activity.attendance.length + data.today_activity.home_visits.length
+    + data.today_activity.assistance_requests.length + data.today_activity.health_observations.length
+
   return <Shell>
-    <PageHeader eyebrow="Overview" title="Analytics" subtitle="Rolling day-to-day operational metrics." />
+    <PageHeader
+      eyebrow="Overview"
+      title="Analytics Overview"
+      subtitle={`As of ${new Date().toLocaleDateString([], { dateStyle: 'long' })} · attendance trend shown for the ${rangeLabel.toLowerCase()}`}
+      actions={<>
+        <select value={rangeDays} onChange={e => setRangeDays(Number(e.target.value))} className="rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-sm text-kInk">
+          {RANGE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
+        <button onClick={handleExport} className="flex items-center gap-2 rounded-xl border border-kBorder px-4 py-3 text-sm font-semibold text-kInk hover:bg-kTint"><Download size={15} /> Export</button>
+      </>}
+    />
 
-    {loading ? <LoadingState label="dashboard" /> : error ? <ErrorState message={error} onRetry={load} /> : <>
-      {data.incidents.critical_open > 0 && <div className="mt-6 flex items-center gap-2 rounded-xl border-l-4 border-l-kDanger bg-kDanger/10 px-5 py-3 text-sm font-bold text-kDanger"><AlertCircle size={16} /> {data.incidents.critical_open} open CRITICAL incident{data.incidents.critical_open > 1 ? 's' : ''} — immediate attention required</div>}
-      {data.incidents.open > 0 && <div className="mt-3 flex items-center gap-2 rounded-xl border-l-4 border-l-kDanger bg-kDanger/10 px-5 py-3 text-sm font-semibold text-kDanger"><AlertCircle size={16} /> {data.incidents.open} open incident{data.incidents.open > 1 ? 's' : ''} need attention</div>}
-      {data.follow_ups.overdue > 0 && <div className="mt-3 flex items-center gap-2 rounded-xl border-l-4 border-l-kWarning bg-kWarning/10 px-5 py-3 text-sm font-semibold text-kWarning"><ClipboardCheck size={16} /> {data.follow_ups.overdue} overdue follow-up{data.follow_ups.overdue > 1 ? 's' : ''}</div>}
-      {data.feeding_resources.low_stock_items > 0 && <div className="mt-3 flex items-center gap-2 rounded-xl border-l-4 border-l-kWarning bg-kWarning/10 px-5 py-3 text-sm font-semibold text-kWarning"><AlertTriangle size={16} /> {data.feeding_resources.low_stock_items} item{data.feeding_resources.low_stock_items > 1 ? 's' : ''} at or below minimum stock</div>}
+    {/* KPI row — exactly the four headline numbers, each with real
+        trend/comparison text only when the underlying count is nonzero. */}
+    <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiCard icon={Users} label="Total Elderly Members" value={data.elderly_care.total_elderly_members.toLocaleString()} tone="primary"
+        sub={data.elderly_care.new_registrations_30d > 0 ? `+${data.elderly_care.new_registrations_30d} new in 30 days` : 'No new registrations in 30 days'} />
+      <KpiCard icon={Heart} label="Active Volunteers" value={data.home_community.active_volunteers.toLocaleString()} tone="primary"
+        sub={data.volunteer_performance.total_assignments > 0 ? `${data.volunteer_performance.completion_rate}% assignment completion` : 'No assignments yet'} />
+      <KpiCard icon={Home} label="Home Visits This Month" value={(monthlyVisits?.total ?? 0).toLocaleString()} tone="success"
+        sub={monthlyVisits?.total ? `${monthlyVisits.by_status.Completed || 0} completed` : 'No home visits logged this month yet'} />
+      <KpiCard icon={Sparkles} label="Donations This Month" value={`KES ${monthlyDonations.total.toLocaleString()}`} tone="accent"
+        sub={monthlyDonations.count > 0 ? `${monthlyDonations.count} confirmed donor${monthlyDonations.count > 1 ? 's' : ''}` : 'No donations logged this month yet'} />
+    </div>
 
-      <Section title="Elderly Care">
-        <StatTile label="Total elderly members" value={data.elderly_care.total_elderly_members} />
-        <StatTile label="New registrations (30d)" value={data.elderly_care.new_registrations_30d} />
-        <StatTile label="Today's attendance" value={data.elderly_care.today_attendance} />
-        <StatTile label="Health follow-ups required" value={data.elderly_care.follow_ups_required} tone={data.elderly_care.follow_ups_required > 0 ? 'warn' : 'default'} />
-      </Section>
-      <TrendChart title="Attendance — last 7 days" series={data.elderly_care.attendance_trend_7d} days={7} />
+    {/* Second row — program activity at a glance, and what needs action. */}
+    <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <SectionCard title="Program Activity">
+        {hasProgramActivity ? <div className="grid gap-4">{programActivity.map(p => <HorizontalBar key={p.label} label={p.label} value={p.value} max={programMax} />)}</div>
+          : <EmptyState icon={Activity} title="No program activity yet" message="Home visits, meals, health checks and activities will appear here once recorded." />}
+      </SectionCard>
 
-      <Section title="Home &amp; Community Support">
-        <StatTile label="Home visits pending" value={data.home_community.home_visits_pending} />
-        <StatTile label="Home visits active" value={data.home_community.home_visits_active} />
-        <StatTile label="Assistance pending" value={data.home_community.assistance_pending} />
-        <StatTile label="Active volunteers" value={data.home_community.active_volunteers} />
-      </Section>
+      <SectionCard title="Needs Attention">
+        {attentionItems.length === 0 ? <EmptyState icon={ClipboardCheck} tone="success" title="All caught up" message="Nothing needs attention right now." />
+          : <div className="grid gap-1">{attentionItems.map(i => <Link key={i.label} to={i.to} className="block -mx-2 rounded-lg px-2 hover:bg-kTint/40">
+              <Row icon={i.icon} tone={i.label === 'Low-stock items' || i.label === 'Pending assistance requests' ? 'warning' : 'danger'} title={i.label} right={<StatusBadge tone={i.label === 'Low-stock items' || i.label === 'Pending assistance requests' ? 'warning' : 'danger'}>{i.value}</StatusBadge>} />
+            </Link>)}</div>}
+        {data.incidents.critical_open > 0 && <div className="mt-3 flex items-center gap-2 rounded-xl border-l-4 border-l-kDanger bg-kDanger/10 px-4 py-2.5 text-xs font-bold text-kDanger"><AlertTriangle size={14} /> {data.incidents.critical_open} of these {data.incidents.critical_open > 1 ? 'are' : 'is'} CRITICAL severity</div>}
+      </SectionCard>
+    </div>
 
-      <Section title="Health">
-        <StatTile label="Health checks (30d)" value={data.health.health_checks_30d} />
-        <StatTile label="Follow-ups required" value={data.health.follow_ups_required} tone={data.health.follow_ups_required > 0 ? 'warn' : 'default'} />
-        <StatTile label="Medication activity (7d)" value={data.health.medication_administrations_7d} />
-        <StatTile label="Clinic visits" value="Not tracked yet" />
-      </Section>
+    {/* Third row — the one real trend chart, and a compact community snapshot. */}
+    <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <SectionCard title="Activity Trend" action={<span className="text-xs font-semibold text-kMuted">{rangeLabel}</span>}>
+        {trendLoading ? <p className="py-8 text-center text-sm text-kMuted">Loading trend…</p>
+          : trendError ? <ErrorState message={trendError} onRetry={() => loadTrend(rangeDays)} />
+          : hasSeriesData(trend?.by_day) ? <TrendBarChart data={trend.by_day} valueLabel="check-ins" />
+          : <EmptyState icon={Calendar} title="No attendance activity yet" message="Trends will appear once records are added." />}
+      </SectionCard>
 
-      <Section title="Feeding &amp; Resources">
-        <StatTile label="Meals served (7d)" value={data.feeding_resources.meals_served_7d} />
-        <StatTile label="Low stock items" value={data.feeding_resources.low_stock_items} tone={data.feeding_resources.low_stock_items > 0 ? 'warn' : 'default'} />
-        <StatTile label="Inventory movements (7d)" value={data.feeding_resources.inventory_movements_7d} />
-        <StatTile label="Donations (30d)" value={data.feeding_resources.donations_30d} />
-      </Section>
-      <div className="grid gap-5 xl:grid-cols-2">
-        <TrendChart title="Meals served — last 7 days" series={data.feeding_resources.meals_trend_7d} days={7} />
-        <TrendChart title="Donations — last 14 days" series={data.feeding_resources.donations_trend_14d} days={14} />
-      </div>
+      <SectionCard title="Community Snapshot">
+        <div className="grid grid-cols-2 gap-3">{snapshot.map(s => <Stat key={s.label} label={s.label} value={s.value.toLocaleString()} />)}</div>
+      </SectionCard>
+    </div>
 
-      <Section title="Activities">
-        <StatTile label="Upcoming activities" value={data.activities.upcoming_count} />
-        <StatTile label="Attended (30d)" value={data.activities.attended_30d} />
-      </Section>
-      {data.activities.upcoming.length > 0 && <div className="card-k mt-5 overflow-hidden">
-        <div className="border-b border-kBorderSoft px-5 py-3 text-sm font-bold text-kGreen">Next up</div>
-        {data.activities.upcoming.map(a => <div key={a.id} className="flex items-center gap-3 border-b border-kBorderSoft px-5 py-3 text-sm last:border-0"><Calendar size={15} className="text-kOrange" /><span className="font-semibold text-kInk">{a.title}</span><span className="text-kMuted">{a.activity_type} &middot; {new Date(a.scheduled_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span></div>)}
-      </div>}
+    {/* Detail sections — everything the old page showed, just organized
+        into on-demand detail instead of one long scroll. Collapsed by
+        default so the summary above stays the first thing visible. */}
+    <div className="mt-8 grid gap-1.5"><h2 className="px-1 font-display text-lg font-bold text-kInk">Detail</h2></div>
+    <div className="mt-3 grid gap-3">
+      <CollapsibleSection title="Elderly Care" icon={Users}>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Stat label="New registrations (30d)" value={data.elderly_care.new_registrations_30d} />
+          <Stat label="Today's attendance" value={data.elderly_care.today_attendance} />
+          <Stat label="Pending follow-ups" value={data.follow_ups.pending} tone={data.follow_ups.pending > 0 ? 'warning' : 'neutral'} />
+        </div>
+        <div className="mt-5">
+          <div className="text-xs font-bold uppercase tracking-wide text-kMuted">Attendance — last 7 days</div>
+          <div className="mt-3">{hasSeriesData(data.elderly_care.attendance_trend_7d) ? <TrendBarChart data={data.elderly_care.attendance_trend_7d} valueLabel="check-ins" /> : <EmptyState icon={Calendar} title="No attendance activity yet" message="Trends will appear once records are added." />}</div>
+        </div>
+      </CollapsibleSection>
 
-      <Section title="Incidents">
-        <StatTile label="Open" value={data.incidents.open} tone={data.incidents.open > 0 ? 'danger' : 'default'} />
-        <StatTile label="Critical (open)" value={data.incidents.critical_open} tone={data.incidents.critical_open > 0 ? 'danger' : 'default'} />
-        <StatTile label="Follow-up required" value={data.incidents.follow_up_required} tone={data.incidents.follow_up_required > 0 ? 'warn' : 'default'} />
-      </Section>
-      {data.incidents.recent.length > 0 && <div className="card-k mt-5 overflow-hidden">
-        <div className="border-b border-kBorderSoft px-5 py-3 text-sm font-bold text-kGreen">Recent incidents</div>
-        {data.incidents.recent.map(i => <div key={i.id} className="flex items-center justify-between border-b border-kBorderSoft px-5 py-3 text-sm last:border-0"><span className="font-semibold text-kInk">{i.elderly_member_name}</span><span className="text-kMuted">{i.incident_type}</span><span className="text-xs font-bold uppercase text-kOrange">{i.status}</span></div>)}
-      </div>}
+      <CollapsibleSection title="Health" icon={HeartPulse}>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Stat label="Follow-ups required" value={data.health.follow_ups_required} tone={data.health.follow_ups_required > 0 ? 'warning' : 'neutral'} />
+          <Stat label="Medication activity (7d)" value={data.health.medication_administrations_7d} />
+          <Stat label="Clinic visits" value="Not tracked yet" />
+        </div>
+      </CollapsibleSection>
 
-      <div className="mt-8 flex items-center justify-between"><h2 className="font-display text-xl font-bold text-kGreen">Follow-ups</h2><Link to="/admin/followups" className="text-sm font-semibold text-kGreen">Manage follow-ups</Link></div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Pending follow-ups" value={data.follow_ups.pending} tone={data.follow_ups.pending > 0 ? 'warn' : 'default'} />
-        <StatTile label="Overdue follow-ups" value={data.follow_ups.overdue} tone={data.follow_ups.overdue > 0 ? 'danger' : 'default'} />
-      </div>
+      <CollapsibleSection title="Feeding & Resources" icon={Utensils}>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Stat label="Inventory movements (7d)" value={data.feeding_resources.inventory_movements_7d} />
+          <Stat label="Low stock items" value={data.feeding_resources.low_stock_items} tone={data.feeding_resources.low_stock_items > 0 ? 'warning' : 'neutral'} />
+          <Stat label="Donations (30d)" value={data.feeding_resources.donations_30d} />
+        </div>
+        <div className="mt-5 grid gap-5 md:grid-cols-2">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wide text-kMuted">Meals served — last 7 days</div>
+            <div className="mt-3">{hasSeriesData(data.feeding_resources.meals_trend_7d) ? <TrendBarChart data={data.feeding_resources.meals_trend_7d} valueLabel="meals" /> : <EmptyState icon={Utensils} title="No meals logged yet" message="Trends will appear once records are added." />}</div>
+          </div>
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wide text-kMuted">Donations — last 14 days</div>
+            <div className="mt-3">{hasSeriesData(data.feeding_resources.donations_trend_14d) ? <TrendBarChart data={data.feeding_resources.donations_trend_14d} valueLabel="donations" /> : <EmptyState icon={Sparkles} title="No donations logged yet" message="Trends will appear once records are added." />}</div>
+          </div>
+        </div>
+      </CollapsibleSection>
 
-      <div className="mt-8 flex items-center justify-between"><h2 className="font-display text-xl font-bold text-kGreen">Upcoming Visits</h2><Link to="/admin/calendar" className="text-sm font-semibold text-kGreen">View calendar</Link></div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><StatTile label="Scheduled, not yet done" value={data.upcoming_visits.count} /></div>
-      {data.upcoming_visits.upcoming.length > 0 && <div className="card-k mt-5 overflow-hidden">
-        {data.upcoming_visits.upcoming.map(v => <div key={v.id} className="flex items-center gap-3 border-b border-kBorderSoft px-5 py-3 text-sm last:border-0"><Home size={15} className="text-kOrange" /><span className="font-semibold text-kInk">{v.elderly_member_name}</span><span className="text-kMuted">{v.assigned_to || 'Unassigned'} &middot; {new Date(v.scheduled_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span></div>)}
-      </div>}
+      <CollapsibleSection title="Activities" icon={Activity}>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Stat label="Upcoming activities" value={data.activities.upcoming_count} />
+          <Stat label="Home visits pending" value={data.home_community.home_visits_pending} />
+          <Stat label="Home visits active" value={data.home_community.home_visits_active} />
+          <Stat label="Total assignments" value={data.volunteer_performance.total_assignments} />
+          <Stat label="Assignments completed" value={data.volunteer_performance.completed_assignments} />
+          <Stat label="Happening today" value={todayActivityCount} />
+        </div>
+        {data.activities.upcoming.length > 0 && <div className="mt-5">
+          <div className="text-xs font-bold uppercase tracking-wide text-kMuted">Next up</div>
+          <div className="mt-2 grid gap-1">{data.activities.upcoming.map(a => <Row key={a.id} icon={Calendar} tone="accent" title={a.title} subtitle={a.activity_type} right={<span className="shrink-0 text-xs text-kMuted">{fmtDateTime(a.scheduled_at)}</span>} />)}</div>
+        </div>}
+        {data.upcoming_visits.upcoming.length > 0 && <div className="mt-5">
+          <div className="text-xs font-bold uppercase tracking-wide text-kMuted">Upcoming home visits</div>
+          <div className="mt-2 grid gap-1">{data.upcoming_visits.upcoming.map(v => <Row key={v.id} icon={Home} tone="primary" title={v.elderly_member_name} subtitle={v.assigned_to || 'Unassigned'} right={<span className="shrink-0 text-xs text-kMuted">{fmtDateTime(v.scheduled_at)}</span>} />)}</div>
+        </div>}
+      </CollapsibleSection>
 
-      <div className="mt-8 flex items-center justify-between"><h2 className="font-display text-xl font-bold text-kGreen">Volunteer Performance</h2><Link to="/admin/volunteers" className="text-sm font-semibold text-kGreen">View volunteers</Link></div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Active volunteers" value={data.volunteer_performance.active_volunteers} />
-        <StatTile label="Total assignments" value={data.volunteer_performance.total_assignments} />
-        <StatTile label="Completed" value={data.volunteer_performance.completed_assignments} />
-        <StatTile label="Completion rate" value={`${data.volunteer_performance.completion_rate}%`} />
-      </div>
-
-      <Section title="Today's Activity">
-        <StatTile label="Attendance today" value={data.today_activity.attendance.length} />
-        <StatTile label="Home visits today" value={data.today_activity.home_visits.length} />
-        <StatTile label="Assistance today" value={data.today_activity.assistance_requests.length} />
-        <StatTile label="Health observations today" value={data.today_activity.health_observations.length} />
-      </Section>
-      {(data.today_activity.attendance.length + data.today_activity.home_visits.length + data.today_activity.assistance_requests.length + data.today_activity.health_observations.length) > 0 && <div className="card-k mt-5 overflow-hidden">
-        {data.today_activity.attendance.map(a => <div key={`att-${a.id}`} className="flex items-center gap-3 border-b border-kBorderSoft px-5 py-3 text-sm last:border-0"><ClipboardCheck size={15} className="text-kOrange" /><span className="font-semibold text-kInk">{a.elderly_member_name}</span><span className="text-kMuted">Checked in {new Date(a.check_in_at).toLocaleTimeString([], { timeStyle: 'short' })}</span></div>)}
-        {data.today_activity.home_visits.map(v => <div key={`vis-${v.id}`} className="flex items-center gap-3 border-b border-kBorderSoft px-5 py-3 text-sm last:border-0"><Home size={15} className="text-kOrange" /><span className="font-semibold text-kInk">{v.elderly_member_name}</span><span className="text-kMuted">Home visit — {v.status}</span></div>)}
-        {data.today_activity.assistance_requests.map(r => <div key={`req-${r.id}`} className="flex items-center gap-3 border-b border-kBorderSoft px-5 py-3 text-sm last:border-0"><TrendingUp size={15} className="text-kOrange" /><span className="font-semibold text-kInk">{r.elderly_member_name}</span><span className="text-kMuted">Assistance — {r.status}</span></div>)}
-        {data.today_activity.health_observations.map(h => <div key={`hea-${h.id}`} className="flex items-center gap-3 border-b border-kBorderSoft px-5 py-3 text-sm last:border-0"><Activity size={15} className="text-kOrange" /><span className="font-semibold text-kInk">{h.elderly_member_name}</span><span className="text-kMuted">Health observation — {h.wellbeing || 'recorded'}</span></div>)}
-      </div>}
-    </>}
+      <CollapsibleSection title="Safety / Incidents" icon={ShieldAlert}>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Stat label="Open" value={data.incidents.open} tone={data.incidents.open > 0 ? 'danger' : 'neutral'} />
+          <Stat label="Critical (open)" value={data.incidents.critical_open} tone={data.incidents.critical_open > 0 ? 'danger' : 'neutral'} />
+          <Stat label="Follow-up required" value={data.incidents.follow_up_required} tone={data.incidents.follow_up_required > 0 ? 'warning' : 'neutral'} />
+        </div>
+        {data.incidents.recent.length > 0 ? <div className="mt-5">
+          <div className="text-xs font-bold uppercase tracking-wide text-kMuted">Recent incidents</div>
+          <div className="mt-2 grid gap-1">{data.incidents.recent.map(i => <Row key={i.id} icon={ShieldAlert} tone={i.status === 'Open' ? 'danger' : 'neutral'} title={i.elderly_member_name} subtitle={i.incident_type} right={<StatusBadge tone={i.status === 'Open' ? 'danger' : 'neutral'}>{i.status}</StatusBadge>} />)}</div>
+        </div> : <div className="mt-5"><EmptyState icon={ShieldAlert} tone="success" title="No incidents on record" message="Recent incidents will show up here." /></div>}
+      </CollapsibleSection>
+    </div>
   </Shell>
 }
