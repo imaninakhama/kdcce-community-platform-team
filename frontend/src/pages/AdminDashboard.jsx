@@ -13,6 +13,7 @@ import StatusBadge from '../components/shared/StatusBadge'
 import EmptyState from '../components/shared/EmptyState'
 import SectionCard from '../components/shared/SectionCard'
 import Row from '../components/shared/Row'
+import TrendBarChart from '../components/shared/TrendBarChart'
 import { useToast, errorMessage, LoadingState, ErrorState } from '../components/admin/adminHelpers'
 import { useApiResource } from '../lib/useApiResource'
 import { apiFetch, clearSession, getStoredUser, getToken, uploadFile } from '../lib/api'
@@ -159,7 +160,11 @@ function Overview({ donations }) {
 
           <SectionCard title="Donations & impact" action={<Link to="/admin/donations" className="text-sm font-semibold text-kGreen">View all</Link>}>
             <div className="flex items-center gap-3 rounded-xl bg-kBorderSoft p-4"><Sparkles size={18} className="shrink-0 text-kOrange" /><p className="text-sm text-kInk">{data.feeding_resources.donations_30d} donation{data.feeding_resources.donations_30d === 1 ? '' : 's'} logged in the last 30 days.</p></div>
-            <div className="mt-4 grid gap-2">
+            <div className="mt-5">
+              <div className="text-xs font-bold uppercase tracking-wide text-kMuted">Donations — last 14 days</div>
+              <div className="mt-3"><TrendBarChart data={data.feeding_resources.donations_trend_14d} valueLabel="donations" /></div>
+            </div>
+            <div className="mt-5 grid gap-2">
               {recentDonations.map(r => <div key={r.id} className="flex items-center justify-between gap-3 border-b border-kBorderSoft py-2.5 text-sm last:border-0">
                 <div className="min-w-0"><div className="truncate font-semibold text-kInk">{r.donor_name}</div><div className="text-xs text-kMuted">{r.created_at.slice(0, 10)}</div></div>
                 <StatusBadge tone={r.status === 'Paid' || r.status === 'Received' ? 'success' : r.status === 'Failed' ? 'danger' : 'warning'}>{r.status}</StatusBadge>
