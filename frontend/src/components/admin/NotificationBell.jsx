@@ -75,13 +75,13 @@ export default function NotificationBell({ variant = 'dark' }) {
   return <div className="relative">
     <button onClick={() => setOpen(o => !o)} className={`relative grid h-9 w-9 place-items-center rounded-full hover:bg-white/10 ${iconClass}`} aria-label="Notifications">
       <Bell size={18} />
-      {unreadCount > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-[16px] place-items-center rounded-full bg-kOrange px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+      {unreadCount > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-[16px] place-items-center rounded-full bg-kDanger px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? '9+' : unreadCount}</span>}
     </button>
     {open && <div ref={panelRef} className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-2xl border border-kBorderSoft bg-kSurface text-kInk shadow-soft" onMouseLeave={() => setOpen(false)}>
-      <div className="flex items-center justify-between border-b border-kBorderSoft px-4 py-3"><span className="text-sm font-bold text-kGreen">Notifications</span>{unreadCount > 0 && <button onClick={markAllRead} className="flex items-center gap-1 text-xs font-semibold text-kOrange"><Check size={13} /> Mark all read</button>}</div>
+      <div className="flex items-center justify-between border-b border-kBorderSoft px-4 py-3"><span className="text-sm font-bold text-kGreen">Notifications</span>{unreadCount > 0 && <button onClick={markAllRead} className="flex items-center gap-1 text-xs font-semibold text-kGreen"><Check size={13} /> Mark all read</button>}</div>
       <div className="max-h-96 overflow-y-auto">
-        {loading ? <p className="p-4 text-center text-sm text-kMuted">Loading…</p> : notifications.length === 0 ? <p className="p-4 text-center text-sm text-kMuted">No notifications yet.</p> : notifications.map(n => <button key={n.id} onClick={() => markRead(n)} className={`block w-full border-b border-kBorderSoft px-4 py-3 text-left last:border-0 ${n.is_read ? '' : 'bg-kTint/40'}`}>
-          <div className="flex items-start justify-between gap-2"><span className="text-sm font-semibold text-kInk">{n.title}</span>{!n.is_read && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-kOrange" />}</div>
+        {loading ? <p className="p-4 text-center text-sm text-kMuted">Loading…</p> : notifications.length === 0 ? <p className="p-4 text-center text-sm text-kMuted">No notifications yet.</p> : notifications.map(n => <button key={n.id} onClick={() => markRead(n)} className={`block w-full border-b border-kBorderSoft px-4 py-3 text-left last:border-0 ${n.is_read ? '' : 'bg-kGreen/5'}`}>
+          <div className="flex items-start justify-between gap-2"><span className="text-sm font-semibold text-kInk">{n.title}</span>{!n.is_read && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-kGreen" />}</div>
           <p className="mt-1 text-xs text-kMuted">{n.message}</p>
           <p className="mt-1 text-[10px] uppercase tracking-wide text-kMuted">{timeAgo(n.created_at)}</p>
         </button>)}

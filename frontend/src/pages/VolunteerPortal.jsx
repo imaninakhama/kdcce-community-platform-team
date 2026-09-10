@@ -8,10 +8,9 @@ import { VOLUNTEER_STATUS_LABELS, VOLUNTEER_STATUS_STYLES } from '../lib/volunte
 import VolunteerDashboard from './volunteer/VolunteerDashboard'
 import MyVolunteerProfile from './volunteer/MyVolunteerProfile'
 import MyAssignments from './volunteer/MyAssignments'
-import MyAssistanceRequests from './volunteer/MyAssistanceRequests'
+import Opportunities from './volunteer/Opportunities'
 import MyElderlyMembers from './volunteer/MyElderlyMembers'
-import MyActivity from './volunteer/MyActivity'
-import MyPerformance from './volunteer/MyPerformance'
+import MyImpact from './volunteer/MyImpact'
 import VolunteerMessages from './volunteer/VolunteerMessages'
 import ReportConcern from './volunteer/ReportConcern'
 import VolunteerNotifications from './volunteer/VolunteerNotifications'
@@ -92,11 +91,10 @@ export default function VolunteerPortal() {
     <Routes>
       <Route index element={<VolunteerDashboard profile={profile} />} />
       <Route path="profile" element={<MyVolunteerProfile showToast={showToast} />} />
-      <Route path="home-visits" element={<MyAssignments showToast={showToast} />} />
-      <Route path="assistance" element={<MyAssistanceRequests showToast={showToast} />} />
-      <Route path="elderly-members" element={<MyElderlyMembers />} />
-      <Route path="activity" element={<MyActivity />} />
-      <Route path="performance" element={<MyPerformance />} />
+      <Route path="assignments" element={<MyAssignments showToast={showToast} />} />
+      <Route path="opportunities" element={<Opportunities showToast={showToast} />} />
+      <Route path="people" element={<MyElderlyMembers />} />
+      <Route path="impact" element={<MyImpact />} />
       <Route path="messages" element={<VolunteerMessages />} />
       <Route path="report-concern" element={<ReportConcern showToast={showToast} />} />
       <Route path="notifications" element={<VolunteerNotifications />} />

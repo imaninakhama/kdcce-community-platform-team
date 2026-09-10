@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Mail, MailOpen, Reply, Trash2 } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
+import PageHeader from '../../components/shared/PageHeader'
 import { LoadingState, ErrorState } from '../../components/admin/adminHelpers'
 import { useApiResource } from '../../lib/useApiResource'
 
@@ -29,7 +30,7 @@ export default function InboxManager({ showToast }) {
   const unread = inboxApi.items.filter(m => !m.is_read).length
 
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Inbox</h1></div><div className="rounded-full bg-kTint px-4 py-2 text-sm font-bold text-kOrange">{unread} unread</div></div>
+    <PageHeader eyebrow="Fundraising & content" title="Inbox" subtitle="Messages submitted through the public contact form." actions={<div className="rounded-full bg-kGreen/10 px-4 py-2 text-sm font-bold text-kGreen">{unread} unread</div>} />
     {inboxApi.loading ? <LoadingState label="messages" /> : inboxApi.error ? <ErrorState message={inboxApi.error} onRetry={inboxApi.reload} /> : <div className="card-k mt-7 divide-y divide-kBorderSoft">
       {inboxApi.items.map(m => <div key={m.id} className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">

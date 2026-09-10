@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { Search, Plus, AlertTriangle, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import Modal from '../../components/admin/Modal'
+import PageHeader from '../../components/shared/PageHeader'
+import StatusBadge from '../../components/shared/StatusBadge'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { useApiResource } from '../../lib/useApiResource'
 import { apiFetch } from '../../lib/api'
@@ -81,7 +83,7 @@ function ItemDetail({ item, onReload, showToast }) {
   useEffect(() => { load() }, [load])
 
   return <div className="card-k p-6">
-    <div className="flex items-center justify-between"><div><h2 className="font-display text-lg font-bold text-kGreen">{item.name}</h2><p className="text-xs text-kMuted">{item.category}</p></div>{item.low_stock && <span className="flex items-center gap-1 rounded-full bg-kTint px-3 py-1 text-xs font-bold text-kOrange"><AlertTriangle size={13} /> Low stock</span>}</div>
+    <div className="flex items-center justify-between"><div><h2 className="font-display text-lg font-bold text-kGreen">{item.name}</h2><p className="text-xs text-kMuted">{item.category}</p></div>{item.low_stock && <StatusBadge tone="warning" icon={AlertTriangle}>Low stock</StatusBadge>}</div>
     <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
       <div className="rounded-xl bg-kCream p-4"><div className="text-xs text-kMuted">Current stock</div><div className="mt-1 font-display text-2xl font-bold text-kGreen">{item.current_stock} <span className="text-sm font-normal text-kMuted">{item.unit}</span></div></div>
       <div className="rounded-xl bg-kCream p-4"><div className="text-xs text-kMuted">Minimum stock</div><div className="mt-1 font-display text-2xl font-bold text-kInk">{item.minimum_stock} <span className="text-sm font-normal text-kMuted">{item.unit}</span></div></div>
@@ -94,7 +96,7 @@ function ItemDetail({ item, onReload, showToast }) {
 
     <h3 className="mt-6 font-display text-sm font-bold uppercase tracking-wide text-kMuted">History</h3>
     {loading ? <p className="mt-3 text-sm text-kMuted">Loading…</p> : <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[500px] text-left text-sm"><thead className="text-xs uppercase tracking-wider text-kMuted"><tr><th className="py-2">Type</th><th>Qty</th><th>Reason</th><th>By</th><th>Date</th></tr></thead><tbody>
-      {movements.map(m => <tr key={m.id} className="border-t border-kBorderSoft"><td className={`py-2 font-semibold ${m.movement_type === 'In' ? 'text-kGreen' : 'text-kOrange'}`}>{m.movement_type}</td><td>{m.quantity}</td><td className="text-kMuted">{m.reason || '—'}</td><td className="text-kMuted">{m.recorded_by}</td><td className="text-kMuted">{fmtDate(m.created_at)}</td></tr>)}
+      {movements.map(m => <tr key={m.id} className="border-t border-kBorderSoft"><td className={`py-2 font-semibold ${m.movement_type === 'In' ? 'text-kSuccess' : 'text-kMuted'}`}>{m.movement_type}</td><td>{m.quantity}</td><td className="text-kMuted">{m.reason || '—'}</td><td className="text-kMuted">{m.recorded_by}</td><td className="text-kMuted">{fmtDate(m.created_at)}</td></tr>)}
       {movements.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-kMuted">No movements yet.</td></tr>}
     </tbody></table></div>}
 
@@ -119,12 +121,9 @@ export default function InventoryManager({ showToast }) {
   const lowStockCount = itemsApi.items.filter(i => i.low_stock).length
 
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-      <div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Inventory</h1></div>
-      <button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> Add item</button>
-    </div>
+    <PageHeader eyebrow="Operations" title="Inventory" subtitle="Stock levels and movement history." actions={<button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> Add item</button>} />
 
-    {lowStockCount > 0 && <button onClick={() => setLowStockOnly(true)} className="mt-6 flex w-full items-center gap-2 rounded-xl border-l-4 border-l-kOrange bg-kTint px-5 py-3 text-left text-sm font-semibold text-kOrange"><AlertTriangle size={16} /> {lowStockCount} item{lowStockCount > 1 ? 's' : ''} at or below minimum stock</button>}
+    {lowStockCount > 0 && <button onClick={() => setLowStockOnly(true)} className="mt-6 flex w-full items-center gap-2 rounded-xl border-l-4 border-l-kWarning bg-kWarning/10 px-5 py-3 text-left text-sm font-semibold text-kWarning"><AlertTriangle size={16} /> {lowStockCount} item{lowStockCount > 1 ? 's' : ''} at or below minimum stock</button>}
 
     <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1.1fr]">
       <div>
@@ -137,9 +136,9 @@ export default function InventoryManager({ showToast }) {
             </div>
           </div>
           {itemsApi.loading ? <LoadingState label="inventory" /> : itemsApi.error ? <ErrorState message={itemsApi.error} onRetry={itemsApi.reload} /> : <div className="grid gap-2 p-4">
-            {filtered.map(i => <button key={i.id} onClick={() => setSelectedId(i.id)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left ${selectedId === i.id ? 'border-kOrange bg-kTint' : 'border-kBorder hover:bg-kCream'}`}>
+            {filtered.map(i => <button key={i.id} onClick={() => setSelectedId(i.id)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left ${selectedId === i.id ? 'border-kGreen bg-kGreen/5' : 'border-kBorder hover:bg-kCream'}`}>
               <div><div className="font-semibold text-kInk">{i.name}</div><div className="text-xs text-kMuted">{i.category}</div></div>
-              <div className="text-right"><div className={`text-sm font-bold ${i.low_stock ? 'text-kOrange' : 'text-kGreen'}`}>{i.current_stock} {i.unit}</div>{i.low_stock && <div className="text-xs text-kOrange">Low</div>}</div>
+              <div className="text-right"><div className={`text-sm font-bold ${i.low_stock ? 'text-kWarning' : 'text-kSuccess'}`}>{i.current_stock} {i.unit}</div>{i.low_stock && <div className="text-xs text-kWarning">Low</div>}</div>
             </button>)}
             {filtered.length === 0 && <p className="p-4 text-center text-sm text-kMuted">No items match your filters.</p>}
           </div>}

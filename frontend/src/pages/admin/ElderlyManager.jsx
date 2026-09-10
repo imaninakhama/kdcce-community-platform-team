@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Plus, Pencil, Trash2, User } from 'lucide-react'
+import { Plus, Pencil, Trash2, User } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import Modal from '../../components/admin/Modal'
+import PageHeader from '../../components/shared/PageHeader'
+import StatusBadge from '../../components/shared/StatusBadge'
+import FilterBar from '../../components/shared/FilterBar'
+import DataTable from '../../components/shared/DataTable'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { useApiResource } from '../../lib/useApiResource'
 import { getStoredUser } from '../../lib/api'
@@ -10,6 +14,7 @@ import { isValidKenyanPhone, PHONE_ERROR_MESSAGE, PHONE_MAX_LENGTH, sanitizePhon
 
 const GENDERS = ['Male', 'Female', 'Other']
 const STATUSES = ['Active', 'Inactive', 'Deceased', 'Transferred']
+const STATUS_TONE = { Active: 'success', Inactive: 'neutral', Transferred: 'info', Deceased: 'neutral' }
 
 function OpaPanel({ opas, loading, createOpa, showToast }) {
   const [name, setName] = useState('')
@@ -106,22 +111,25 @@ export default function ElderlyManager({ showToast }) {
   }
 
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-      <div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Elderly members</h1></div>
-      <button onClick={() => openModal()} className="btn-green"><Plus size={16} /> Register member</button>
-    </div>
+    <PageHeader eyebrow="People" title="Elderly members" subtitle="Registered members and their community group (OPA) assignments." actions={<button onClick={() => openModal()} className="btn-green"><Plus size={16} /> Register member</button>} />
 
     <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_320px]">
       <div>
         {membersApi.loading ? <LoadingState label="members" /> : membersApi.error ? <ErrorState message={membersApi.error} onRetry={membersApi.reload} /> : <div className="card-k overflow-hidden">
-          <div className="flex flex-col gap-3 border-b border-kBorderSoft p-5 sm:flex-row">
-            <div className="relative flex-1"><Search className="absolute left-3 top-3.5 text-kMuted" size={17} /><input value={q} onChange={e => setQ(e.target.value)} className="input-k pl-10" placeholder="Search name or member ID..." /></div>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-sm text-kInk"><option>All</option>{STATUSES.map(s => <option key={s}>{s}</option>)}</select>
-          </div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="bg-kBorderSoft text-xs uppercase tracking-wider text-kMuted"><tr><th className="px-5 py-4">Member ID</th><th className="px-5 py-4">Name</th><th className="px-5 py-4">Gender</th><th className="px-5 py-4">OPA</th><th className="px-5 py-4">Status</th><th className="px-5 py-4">Actions</th></tr></thead><tbody>
-            {filtered.map(m => <tr key={m.id} className="border-b border-kBorderSoft"><td className="px-5 py-4 text-kMuted">{m.member_id}</td><td className="px-5 py-4 font-semibold text-kInk">{m.full_name}</td><td className="px-5 py-4 text-kMuted">{m.gender}</td><td className="px-5 py-4 text-kMuted">{m.opa_name || '—'}</td><td className="px-5 py-4 text-kMuted">{m.status}</td><td className="px-5 py-4"><div className="flex gap-3"><Link to={`/admin/elderly/${m.id}`} className="text-kGreen" title="View profile"><User size={16} /></Link><button onClick={() => openModal(m)} className="text-kOrange" title="Edit"><Pencil size={16} /></button>{isAdmin && <button onClick={() => remove(m)} className="text-kMuted hover:text-red-600" title="Delete"><Trash2 size={16} /></button>}</div></td></tr>)}
-            {filtered.length === 0 && <tr><td colSpan={6} className="px-5 py-10 text-center text-sm text-kMuted">No members match your search.</td></tr>}
-          </tbody></table></div>
+          <FilterBar value={q} onChange={setQ} placeholder="Search name or member ID...">
+          </FilterBar>
+          <DataTable
+            emptyMessage="No members match your search."
+            columns={[
+              { key: 'id', header: 'Member ID', cell: m => <span className="text-kMuted">{m.member_id}</span> },
+              { key: 'name', header: 'Name', cell: m => <span className="font-semibold text-kInk">{m.full_name}</span> },
+              { key: 'gender', header: 'Gender', cell: m => <span className="text-kMuted">{m.gender}</span> },
+              { key: 'opa', header: 'OPA', cell: m => <span className="text-kMuted">{m.opa_name || '—'}</span> },
+              { key: 'status', header: 'Status', cell: m => <StatusBadge tone={STATUS_TONE[m.status] || 'neutral'}>{m.status}</StatusBadge> },
+              { key: 'actions', header: 'Actions', cell: m => <div className="flex gap-3"><Link to={`/admin/elderly/${m.id}`} className="text-kGreen" title="View profile"><User size={16} /></Link><button onClick={() => openModal(m)} className="text-kOrange" title="Edit"><Pencil size={16} /></button>{isAdmin && <button onClick={() => remove(m)} className="text-kMuted hover:text-red-600" title="Delete"><Trash2 size={16} /></button>}</div> },
+            ]}
+            rows={filtered}
+          />
         </div>}
       </div>
       <OpaPanel opas={opasApi.items} loading={opasApi.loading} createOpa={opasApi.create} showToast={showToast} />

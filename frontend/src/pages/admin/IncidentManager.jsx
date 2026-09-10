@@ -2,14 +2,17 @@ import { useState, useEffect, useCallback } from 'react'
 import { Search, Plus, Pencil, AlertTriangle } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import Modal from '../../components/admin/Modal'
+import PageHeader from '../../components/shared/PageHeader'
+import StatusBadge from '../../components/shared/StatusBadge'
+import DataTable from '../../components/shared/DataTable'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { apiFetch } from '../../lib/api'
 
 const TYPES = ['Fall', 'Injury', 'Medical Concern', 'Accident', 'Safeguarding Concern', 'Other']
 const STATUSES = ['Open', 'Under Review', 'Resolved', 'Closed']
 const SEVERITIES = ['Low', 'Medium', 'High', 'Critical']
-const STATUS_STYLES = { Open: 'bg-red-100 text-red-700', 'Under Review': 'bg-kTint text-kOrange', Resolved: 'bg-kGreen/10 text-kGreen', Closed: 'bg-kBorderSoft text-kMuted' }
-const SEVERITY_STYLES = { Low: 'bg-kBorderSoft text-kMuted', Medium: 'bg-kTint text-kOrange', High: 'bg-orange-100 text-orange-700', Critical: 'bg-red-100 text-red-700' }
+const STATUS_TONE = { Open: 'danger', 'Under Review': 'warning', Resolved: 'success', Closed: 'neutral' }
+const SEVERITY_TONE = { Low: 'neutral', Medium: 'info', High: 'warning', Critical: 'danger' }
 
 function fmt(iso) { return iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—' }
 
@@ -142,12 +145,9 @@ export default function IncidentManager({ showToast }) {
   const openCount = incidents.filter(i => i.status === 'Open').length
 
   return <Shell>
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-      <div><div className="eyebrow">Manage</div><h1 className="font-display text-3xl font-bold text-kGreen">Incidents</h1></div>
-      <button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> Report incident</button>
-    </div>
+    <PageHeader eyebrow="Operations" title="Incidents" subtitle="Falls, injuries, and safeguarding reports." actions={<button onClick={() => setNewModalOpen(true)} className="btn-green"><Plus size={16} /> Report incident</button>} />
 
-    {openCount > 0 && <div className="mt-6 flex items-center gap-2 rounded-xl border-l-4 border-l-red-500 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 dark:bg-red-500/10"><AlertTriangle size={16} /> {openCount} open incident{openCount > 1 ? 's' : ''}</div>}
+    {openCount > 0 && <div className="mt-6 flex items-center gap-2 rounded-xl border-l-4 border-l-kDanger bg-kDanger/10 px-5 py-3 text-sm font-semibold text-kDanger"><AlertTriangle size={16} /> {openCount} open incident{openCount > 1 ? 's' : ''}</div>}
 
     {loading ? <LoadingState label="incidents" /> : error ? <ErrorState message={error} onRetry={load} /> : <div className="card-k mt-7 overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-kBorderSoft p-5 sm:flex-row">
@@ -156,10 +156,19 @@ export default function IncidentManager({ showToast }) {
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-sm text-kInk"><option>All</option>{STATUSES.map(s => <option key={s}>{s}</option>)}</select>
         <label className="flex items-center gap-2 whitespace-nowrap rounded-xl border border-kBorder px-4 text-sm font-semibold text-kInk"><input type="checkbox" checked={followUpOnly} onChange={e => setFollowUpOnly(e.target.checked)} className="h-4 w-4" /> Needs follow-up</label>
       </div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left text-sm"><thead className="bg-kBorderSoft text-xs uppercase tracking-wider text-kMuted"><tr><th className="px-5 py-4">Member</th><th className="px-5 py-4">Type</th><th className="px-5 py-4">Severity</th><th className="px-5 py-4">When</th><th className="px-5 py-4">Status</th><th className="px-5 py-4">Follow-up</th><th className="px-5 py-4">Actions</th></tr></thead><tbody>
-        {incidents.map(i => <tr key={i.id} className="border-b border-kBorderSoft"><td className="px-5 py-4"><div className="font-semibold text-kInk">{i.elderly_member_name}</div><div className="text-xs text-kMuted">{i.elderly_member_code}</div></td><td className="px-5 py-4 text-kMuted">{i.incident_type}</td><td className="px-5 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${SEVERITY_STYLES[i.severity]}`}>{i.severity}</span></td><td className="px-5 py-4 text-kMuted">{fmt(i.occurred_at)}</td><td className="px-5 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLES[i.status]}`}>{i.status}</span></td><td className="px-5 py-4">{i.follow_up_required ? <span className="text-xs font-bold text-kOrange">Required</span> : '—'}</td><td className="px-5 py-4"><button onClick={() => setEditIncident(i)} className="text-kOrange"><Pencil size={16} /></button></td></tr>)}
-        {incidents.length === 0 && <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-kMuted">No incidents match your filters.</td></tr>}
-      </tbody></table></div>
+      <DataTable
+        emptyMessage="No incidents match your filters."
+        columns={[
+          { key: 'member', header: 'Member', cell: i => <><div className="font-semibold text-kInk">{i.elderly_member_name}</div><div className="text-xs text-kMuted">{i.elderly_member_code}</div></> },
+          { key: 'type', header: 'Type', cell: i => <span className="text-kMuted">{i.incident_type}</span> },
+          { key: 'severity', header: 'Severity', cell: i => <StatusBadge tone={SEVERITY_TONE[i.severity]}>{i.severity}</StatusBadge> },
+          { key: 'when', header: 'When', cell: i => <span className="text-kMuted">{fmt(i.occurred_at)}</span> },
+          { key: 'status', header: 'Status', cell: i => <StatusBadge tone={STATUS_TONE[i.status]}>{i.status}</StatusBadge> },
+          { key: 'followup', header: 'Follow-up', cell: i => i.follow_up_required ? <StatusBadge tone="danger">Required</StatusBadge> : '—' },
+          { key: 'actions', header: 'Actions', cell: i => <button onClick={() => setEditIncident(i)} className="text-kGreen"><Pencil size={16} /></button> },
+        ]}
+        rows={incidents}
+      />
     </div>}
 
     {newModalOpen && <NewIncidentModal onClose={() => setNewModalOpen(false)} onCreated={async data => { await apiFetch('/api/incidents', { method: 'POST', body: data }); load() }} showToast={showToast} />}

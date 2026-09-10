@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Home, HandHeart } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
+import PageHeader from '../../components/shared/PageHeader'
+import StatusBadge from '../../components/shared/StatusBadge'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { apiFetch } from '../../lib/api'
 
@@ -35,7 +37,7 @@ export default function AssignmentCalendar() {
   const days = groupByDay(events)
 
   return <Shell>
-    <div><div className="eyebrow">Schedule</div><h1 className="font-display text-3xl font-bold text-kGreen">Assignment calendar</h1></div>
+    <PageHeader eyebrow="Operations" title="Assignment calendar" subtitle="All scheduled home visits and assistance requests." />
 
     {loading ? <LoadingState label="calendar" /> : error ? <ErrorState message={error} onRetry={load} /> : <div className="mt-7 grid gap-4">
       {days.map(([day, dayEvents]) => <div key={day} className="card-k overflow-hidden">
@@ -51,7 +53,7 @@ export default function AssignmentCalendar() {
                 <div className="flex items-center gap-2"><span className="font-semibold text-kInk">{TYPE_LABELS[e.type]}</span><span className="text-xs text-kMuted">{new Date(e.scheduled_at).toLocaleTimeString([], { timeStyle: 'short' })}</span></div>
                 <div className="text-sm text-kMuted">{e.elderly_member_name} &middot; {e.assigned_to || 'Unassigned'}</div>
               </div>
-              <span className="text-xs font-bold uppercase tracking-wide text-kOrange">{e.status}</span>
+              <StatusBadge tone={e.status === 'Completed' ? 'success' : e.status === 'Cancelled' ? 'danger' : 'warning'}>{e.status}</StatusBadge>
             </div>
           })}
         </div>
