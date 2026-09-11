@@ -17,7 +17,15 @@ depends_on = None
 
 
 def upgrade():
-    with op.batch_alter_table('volunteer_profiles', schema=None) as batch_op:
+    # recreate='never': every column below is a simple nullable-or-
+    # defaulted ADD COLUMN, which SQLite supports as a plain ALTER TABLE
+    # with no table rebuild needed. Without this, Alembic's default batch
+    # strategy on SQLite recreates the whole table (create-copy-drop-
+    # rename) to apply the batch, and that DROP TABLE fails with a
+    # "FOREIGN KEY constraint failed" here because AssignmentReview.
+    # volunteer_profile_id (see models.py) holds a live FK into this
+    # table — SQLite won't drop a table another table still references.
+    with op.batch_alter_table('volunteer_profiles', schema=None, recreate='never') as batch_op:
         batch_op.add_column(sa.Column('date_of_birth', sa.Date(), nullable=True))
         batch_op.add_column(sa.Column('county', sa.String(length=80), nullable=True))
         batch_op.add_column(sa.Column('min_hours_available', sa.Integer(), nullable=True))
@@ -29,7 +37,7 @@ def upgrade():
 
 
 def downgrade():
-    with op.batch_alter_table('volunteer_profiles', schema=None) as batch_op:
+    with op.batch_alter_table('volunteer_profiles', schema=None, recreate='never') as batch_op:
         batch_op.drop_column('accuracy_declaration_agreed')
         batch_op.drop_column('privacy_consent_agreed')
         batch_op.drop_column('code_of_conduct_agreed')
