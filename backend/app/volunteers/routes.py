@@ -6,13 +6,22 @@ from marshmallow import ValidationError
 
 from ..auth.decorators import roles_required
 from ..extensions import db, limiter
-from ..models import AssistanceRequest, FollowUp, HomeVisit, VolunteerInvitation, VolunteerProfile, utcnow
+from ..models import (
+    AssistanceRequest, FollowUp, HomeVisit, VolunteerInvitation, VolunteerProfile,
+    VolunteerSession, VOLUNTEER_SESSION_ONLINE_WINDOW, utcnow,
+)
 from ..notifications.service import notify
 from ..utils import get_or_404, issue_tokens, validation_error_response
 from .schemas import VolunteerSelfUpdateSchema, VolunteerStaffUpdateSchema
 from .service import create_invitation, send_approved_email, send_rejected_email
 
 bp = Blueprint("volunteers", __name__, url_prefix="/api/volunteers")
+
+# Volunteer login/session tracking is admin-viewed data about volunteers,
+# same reasoning as the rest of this file — kept in its own blueprint (own
+# URL prefix) rather than folded into `bp`, same two-blueprint-per-file
+# pattern as inbox/routes.py (bp vs admin_bp).
+sessions_bp = Blueprint("volunteer_sessions", __name__, url_prefix="/api/admin/volunteer-sessions")
 
 self_schema = VolunteerSelfUpdateSchema()
 staff_schema = VolunteerStaffUpdateSchema()
@@ -31,6 +40,31 @@ def _as_naive_utc(dt):
 def _is_verified_volunteer(user_id):
     profile = VolunteerProfile.query.filter_by(user_id=user_id).first()
     return profile is not None and profile.status == "Verified"
+
+
+def _session_is_online(session_):
+    if session_.logout_at is not None or session_.last_seen_at is None:
+        return False
+    return (_as_naive_utc(utcnow()) - _as_naive_utc(session_.last_seen_at)) <= VOLUNTEER_SESSION_ONLINE_WINDOW
+
+
+def _session_duration_seconds(session_):
+    end = session_.logout_at or utcnow()
+    return int((_as_naive_utc(end) - _as_naive_utc(session_.login_at)).total_seconds())
+
+
+def _session_dict(session_):
+    return {
+        "id": session_.id,
+        "volunteer_id": session_.volunteer_id,
+        "volunteer_name": session_.volunteer.name if session_.volunteer else None,
+        "volunteer_email": session_.volunteer.email if session_.volunteer else None,
+        "login_at": session_.login_at.isoformat(),
+        "logout_at": session_.logout_at.isoformat() if session_.logout_at else None,
+        "last_seen_at": session_.last_seen_at.isoformat() if session_.last_seen_at else None,
+        "duration_seconds": _session_duration_seconds(session_),
+        "status": "Online" if _session_is_online(session_) else "Offline",
+    }
 
 
 # ---------- Self-service ----------
@@ -293,3 +327,20 @@ def accept_invitation(token):
     access_token, refresh_token = issue_tokens(user)
     db.session.commit()
     return jsonify(user=user.to_dict(), access_token=access_token, refresh_token=refresh_token), 200
+
+
+# ---------- Login/session activity (admin) ----------
+
+@sessions_bp.get("")
+@roles_required("admin", "staff")
+def list_volunteer_sessions():
+    sessions = VolunteerSession.query.order_by(VolunteerSession.login_at.desc()).all()
+    return jsonify(sessions=[_session_dict(s) for s in sessions]), 200
+
+
+@sessions_bp.get("/online")
+@roles_required("admin", "staff")
+def list_online_volunteer_sessions():
+    open_sessions = VolunteerSession.query.filter(VolunteerSession.logout_at.is_(None)).order_by(VolunteerSession.login_at.desc()).all()
+    online = [s for s in open_sessions if _session_is_online(s)]
+    return jsonify(sessions=[_session_dict(s) for s in online]), 200

@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Check, X as XIcon } from 'lucide-react'
+import { Check, X as XIcon, ClipboardList, Activity as ActivityIcon } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import Modal from '../../components/admin/Modal'
 import PageHeader from '../../components/shared/PageHeader'
 import StatusBadge from '../../components/shared/StatusBadge'
 import FilterBar from '../../components/shared/FilterBar'
 import DataTable from '../../components/shared/DataTable'
+import VolunteerActivity from './VolunteerActivity'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { useApiResource } from '../../lib/useApiResource'
 
@@ -80,6 +81,7 @@ export default function VolunteerManager({ showToast }) {
   const [q, setQ] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [reviewing, setReviewing] = useState(null)
+  const [section, setSection] = useState('applications')
 
   const filtered = volunteersApi.items.filter(v =>
     (statusFilter === 'All' || v.status === statusFilter) &&
@@ -87,26 +89,32 @@ export default function VolunteerManager({ showToast }) {
   )
 
   return <Shell>
-    <PageHeader eyebrow="People" title="Volunteer applications" subtitle="Review, approve, and manage volunteer applications." />
+    <PageHeader eyebrow="People" title="Volunteers" subtitle="Review applications and monitor volunteer portal activity." />
 
-    {volunteersApi.loading ? <LoadingState label="volunteers" /> : volunteersApi.error ? <ErrorState message={volunteersApi.error} onRetry={volunteersApi.reload} /> : <div className="card-k mt-7 overflow-hidden">
-      <FilterBar value={q} onChange={setQ} placeholder="Search name or email...">
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-sm text-kInk"><option>All</option><option>Pending</option><option>Verified</option><option>Rejected</option></select>
-      </FilterBar>
-      <DataTable
-        emptyMessage="No volunteers match your search."
-        columns={[
-          { key: 'name', header: 'Name', cell: v => <span className="font-semibold text-kInk">{v.name}</span> },
-          { key: 'contact', header: 'Contact', cell: v => <span className="text-kMuted">{v.email}{v.phone ? ` · ${v.phone}` : ''}</span> },
-          { key: 'skills', header: 'Skills', cell: v => <span className="text-kMuted">{v.skills || '—'}</span> },
-          { key: 'availability', header: 'Availability', cell: v => <span className="text-kMuted">{v.availability || '—'}</span> },
-          { key: 'status', header: 'Status', cell: v => <StatusBadge tone={STATUS_TONE[v.status]}>{v.status}</StatusBadge> },
-          { key: 'action', header: 'Action', cell: v => <button onClick={() => setReviewing(v)} className="text-xs font-bold text-kGreen">{v.status === 'Pending' ? 'Review' : 'View'}</button> },
-        ]}
-        rows={filtered}
-      />
-    </div>}
+    <div className="mt-6 inline-flex rounded-xl border border-kBorder bg-kSurface p-1">
+      <button onClick={() => setSection('applications')} className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${section === 'applications' ? 'bg-kGreen text-white' : 'text-kMuted hover:text-kInk'}`}><ClipboardList size={14} className="mr-1.5 inline" /> Applications</button>
+      <button onClick={() => setSection('activity')} className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${section === 'activity' ? 'bg-kGreen text-white' : 'text-kMuted hover:text-kInk'}`}><ActivityIcon size={14} className="mr-1.5 inline" /> Activity</button>
+    </div>
 
-    {reviewing && <ReviewModal volunteer={reviewing} onClose={() => setReviewing(null)} onDecide={(id, data) => volunteersApi.patch(id, data)} showToast={showToast} />}
+    {section === 'applications' ? <>
+      {volunteersApi.loading ? <LoadingState label="volunteers" /> : volunteersApi.error ? <ErrorState message={volunteersApi.error} onRetry={volunteersApi.reload} /> : <div className="card-k mt-6 overflow-hidden">
+        <FilterBar value={q} onChange={setQ} placeholder="Search name or email...">
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-xl border border-kBorder bg-kSurface px-4 py-3 text-sm text-kInk"><option>All</option><option>Pending</option><option>Verified</option><option>Rejected</option></select>
+        </FilterBar>
+        <DataTable
+          emptyMessage="No volunteers match your search."
+          columns={[
+            { key: 'name', header: 'Name', cell: v => <span className="font-semibold text-kInk">{v.name}</span> },
+            { key: 'contact', header: 'Contact', cell: v => <span className="text-kMuted">{v.email}{v.phone ? ` · ${v.phone}` : ''}</span> },
+            { key: 'skills', header: 'Skills', cell: v => <span className="text-kMuted">{v.skills || '—'}</span> },
+            { key: 'availability', header: 'Availability', cell: v => <span className="text-kMuted">{v.availability || '—'}</span> },
+            { key: 'status', header: 'Status', cell: v => <StatusBadge tone={STATUS_TONE[v.status]}>{v.status}</StatusBadge> },
+            { key: 'action', header: 'Action', cell: v => <button onClick={() => setReviewing(v)} className="text-xs font-bold text-kGreen">{v.status === 'Pending' ? 'Review' : 'View'}</button> },
+          ]}
+          rows={filtered}
+        />
+      </div>}
+      {reviewing && <ReviewModal volunteer={reviewing} onClose={() => setReviewing(null)} onDecide={(id, data) => volunteersApi.patch(id, data)} showToast={showToast} />}
+    </> : <VolunteerActivity />}
   </Shell>
 }

@@ -103,12 +103,13 @@ def _register_blueprints(app):
     from .team.routes import bp as team_bp
     from .users.routes import bp as users_bp
     from .volunteers.routes import bp as volunteers_bp
+    from .volunteers.routes import sessions_bp as volunteer_sessions_bp
 
     for bp in (
         activities_bp, analytics_bp, assistance_bp, attendance_bp, auth_bp, calendar_bp,
         donations_bp, elderly_bp, feeding_bp, followups_bp, gallery_bp, health_bp,
         homevisits_bp, inbox_bp, inbox_admin_bp, incidents_bp, inventory_bp, medication_bp, mpesa_bp,
-        notifications_bp, reports_bp, search_bp, team_bp, users_bp, volunteers_bp,
+        notifications_bp, reports_bp, search_bp, team_bp, users_bp, volunteers_bp, volunteer_sessions_bp,
     ):
         app.register_blueprint(bp)
 

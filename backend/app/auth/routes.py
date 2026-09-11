@@ -9,7 +9,7 @@ from flask_jwt_extended import (
 from marshmallow import ValidationError
 
 from ..extensions import db, limiter
-from ..models import RevokedToken, User, VolunteerProfile
+from ..models import RevokedToken, User, VolunteerProfile, VolunteerSession, utcnow
 from ..utils import issue_tokens, validation_error_response
 from ..volunteers.service import send_application_received_email
 from .schemas import LoginSchema, RegisterSchema
@@ -66,6 +66,15 @@ def login():
         return jsonify(error="Invalid email or password"), 401
 
     access_token, refresh_token = issue_tokens(user)
+
+    # Website-presence tracking only (see VolunteerSession's docstring) —
+    # every other role is untouched, and this never affects the tokens
+    # issued above.
+    if user.role == "volunteer":
+        now = utcnow()
+        db.session.add(VolunteerSession(volunteer_id=user.id, login_at=now, last_seen_at=now))
+        db.session.commit()
+
     return jsonify(user=user.to_dict(), access_token=access_token, refresh_token=refresh_token), 200
 
 
@@ -103,5 +112,36 @@ def logout():
         if decoded is not None and decoded.get("type") == "refresh":
             db.session.add(RevokedToken(jti=decoded["jti"]))
 
+    # Closes whatever VolunteerSession login() opened for this user, if
+    # any — a no-op for admin/staff, who never get one. Looked up by
+    # identity rather than gated on the token's role claim so a session
+    # still gets closed even if the caller's role changed mid-session.
+    open_session = (
+        VolunteerSession.query.filter_by(volunteer_id=int(get_jwt_identity()), logout_at=None)
+        .order_by(VolunteerSession.login_at.desc()).first()
+    )
+    if open_session is not None:
+        open_session.logout_at = utcnow()
+
+    db.session.commit()
+    return "", 204
+
+
+@bp.post("/heartbeat")
+@jwt_required()
+def heartbeat():
+    """Keeps a volunteer's active VolunteerSession looking "recently seen"
+    — called on an interval by the volunteer portal while it's open. Not
+    an error if there's no open session (role isn't volunteer, or they
+    logged in before this endpoint existed / already logged out
+    elsewhere) — the caller doesn't need to know or care, it just stops
+    mattering for "online" purposes once beats stop arriving."""
+    open_session = (
+        VolunteerSession.query.filter_by(volunteer_id=int(get_jwt_identity()), logout_at=None)
+        .order_by(VolunteerSession.login_at.desc()).first()
+    )
+    if open_session is None:
+        return "", 204
+    open_session.last_seen_at = utcnow()
     db.session.commit()
     return "", 204

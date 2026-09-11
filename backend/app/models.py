@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -235,6 +235,31 @@ class VolunteerInvitation(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
 
     volunteer_profile = db.relationship("VolunteerProfile", foreign_keys=[volunteer_profile_id])
+
+
+# A volunteer is "online" while logout_at is still unset and last_seen_at
+# falls within this window of now — see app/volunteers/routes.py, the only
+# place that reads it. Kept well above the frontend's heartbeat interval so
+# one missed beat (a network blip, a backgrounded tab) doesn't flap the
+# status to Offline and back.
+VOLUNTEER_SESSION_ONLINE_WINDOW = timedelta(seconds=150)
+
+
+class VolunteerSession(db.Model):
+    """One row per login-to-logout stretch, tracking *website presence*
+    only — deliberately separate from volunteer-hours/service tracking
+    (which this app doesn't have; see docs/api/reports.md), so being
+    signed in must never be mistaken for logged service time."""
+
+    __tablename__ = "volunteer_sessions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    volunteer_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    login_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
+    logout_at = db.Column(db.DateTime(timezone=True))
+    last_seen_at = db.Column(db.DateTime(timezone=True))
+
+    volunteer = db.relationship("User", foreign_keys=[volunteer_id])
 
 
 class Attendance(db.Model):
