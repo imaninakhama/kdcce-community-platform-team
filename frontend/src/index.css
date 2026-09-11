@@ -52,8 +52,26 @@
 }
 .dark { color-scheme: dark; }
 
-html { scroll-behavior: smooth; }
-body { margin: 0; min-width: 320px; background: rgb(var(--k-bg)); transition: background-color .2s ease, color .2s ease; }
+/* scrollbar-gutter: stable reserves the vertical scrollbar's track up
+ * front, on every page, regardless of whether that page's content is
+ * currently tall enough to need one. Without it, a full-width element
+ * (like the homepage hero) painted before a scrollbar appears — or on a
+ * page that never grows one — renders flush against the true window
+ * edge; the moment a scrollbar the layout hadn't reserved space for
+ * does appear (e.g. content loading in taller than the initial paint),
+ * every full-width element shrinks by the scrollbar's width, exposing
+ * body's own white background as a vertical strip on the right. The
+ * overflow-y fallback covers browsers old enough not to support the
+ * property at all. overflow-x guards against any horizontal scrollbar
+ * ever being introduced the same way. */
+html {
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+  overflow-y: scroll;
+  overflow-x: hidden;
+}
+body { margin: 0; min-width: 320px; width: 100%; overflow-x: hidden; background: rgb(var(--k-bg)); transition: background-color .2s ease, color .2s ease; }
+#root { width: 100%; overflow-x: hidden; }
 button, input, textarea, select { font: inherit; }
 img { display: block; }
 

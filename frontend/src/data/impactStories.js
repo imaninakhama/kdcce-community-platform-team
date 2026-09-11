@@ -1,6 +1,8 @@
 // Reusable story-data structure for the "Impact Stories" homepage carousel
-// and its dedicated list/detail pages — mirrors how `programs` in
-// siteData.js drives ProgramCard/Programs/ProgramDetail. There is no
+// (components/ImpactStoriesSection.jsx) — a card's full title/image/intro/
+// body/cta opens in an on-page modal (components/StoryModal.jsx) rather
+// than a dedicated route. Mirrors how `programs` in siteData.js drives
+// ProgramCard/Programs/ProgramDetail. There is no
 // backend story/blog model (blog_posts was dropped in migration
 // 9a3f5c7e1d24); this is frontend-only data, kept in one array so more
 // stories can be added later just by appending an entry here.
@@ -60,7 +62,3 @@ export const impactStories = [
     cta: { label: 'Support Our Programs', to: '/donate' },
   },
 ]
-
-export function getStoryById(id) {
-  return impactStories.find(s => s.id === id)
-}

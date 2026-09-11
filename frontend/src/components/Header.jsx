@@ -77,7 +77,11 @@ export default function Header() {
       {open && (
         <div className="border-t border-kBorderSoft bg-kSurface px-5 pb-5 lg:hidden">
           <div className="mx-auto flex max-w-[1180px] flex-col gap-2 pt-3">
-            {nav.map(([label, to]) => <Link key={label} onClick={() => setOpen(false)} to={to} className="rounded-lg px-3 py-3 font-semibold text-kInk hover:bg-kTint">{label}</Link>)}
+            {nav.map(([label, to]) => (
+              <NavLink key={label} end to={to} onClick={() => setOpen(false)} className={({ isActive }) => `rounded-lg px-3 py-3 font-semibold ${isActive ? 'bg-kTint text-kOrange' : 'text-kInk hover:bg-kTint'}`}>
+                {label}
+              </NavLink>
+            ))}
             <PrimaryButton to="/donate" className="mt-2"><Heart className="h-4 w-4" /> Donate Now</PrimaryButton>
           </div>
         </div>

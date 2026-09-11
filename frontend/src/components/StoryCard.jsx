@@ -1,16 +1,18 @@
 import React from 'react'
-import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 
-// Shared card for an impact story — used by both the homepage carousel
-// and the /impact-stories index page. A fixed aspect-ratio image crop
+// Shared card for an impact story — used by the homepage's impact
+// carousel. Clicking a card opens its full story in an on-page modal
+// (see ImpactStoriesSection.jsx) rather than navigating, so this is a
+// plain button, not a link. A fixed aspect-ratio image crop
 // (object-cover, never stretched) keeps every card the same height
 // regardless of the source photo's own dimensions.
-export default function StoryCard({ story }) {
+export default function StoryCard({ story, onClick }) {
   return (
-    <Link
-      to={`/impact-stories/${story.id}`}
-      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-kBorderSoft bg-kSurface shadow-soft transition hover:-translate-y-1 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-kOrange focus-visible:ring-offset-2 dark:shadow-none"
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-kBorderSoft bg-kSurface text-left shadow-soft transition hover:-translate-y-1 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-kOrange focus-visible:ring-offset-2 dark:shadow-none"
     >
       <div className="aspect-[4/3] w-full overflow-hidden bg-kTint">
         <img
@@ -28,6 +30,6 @@ export default function StoryCard({ story }) {
           Read Story <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
         </span>
       </div>
-    </Link>
+    </button>
   )
 }

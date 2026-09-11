@@ -1,9 +1,11 @@
-import React from 'react'
+import React, { useState } from 'react'
 import Carousel from './Carousel'
 import StoryCard from './StoryCard'
+import StoryModal from './StoryModal'
 import { impactStories } from '../data/impactStories'
 
 export default function ImpactStoriesSection() {
+  const [selected, setSelected] = useState(null)
   if (impactStories.length === 0) return null
   return (
     <section className="bg-kCream py-20">
@@ -14,9 +16,10 @@ export default function ImpactStoriesSection() {
           <div className="mx-auto mt-4 h-1 w-16 rounded-full bg-kOrange" />
         </div>
         <div className="mt-12">
-          <Carousel items={impactStories} ariaLabel="Impact stories" renderItem={story => <StoryCard story={story} />} />
+          <Carousel items={impactStories} ariaLabel="Impact stories" renderItem={story => <StoryCard story={story} onClick={() => setSelected(story)} />} />
         </div>
       </div>
+      {selected && <StoryModal story={selected} onClose={() => setSelected(null)} />}
     </section>
   )
 }
