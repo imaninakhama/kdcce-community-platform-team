@@ -8,6 +8,7 @@ import { VOLUNTEER_STATUS_LABELS, VOLUNTEER_STATUS_STYLES } from '../lib/volunte
 import VolunteerDashboard from './volunteer/VolunteerDashboard'
 import MyVolunteerProfile from './volunteer/MyVolunteerProfile'
 import MyAssignments from './volunteer/MyAssignments'
+import HomeVisitDetail from './volunteer/HomeVisitDetail'
 import Opportunities from './volunteer/Opportunities'
 import MyElderlyMembers from './volunteer/MyElderlyMembers'
 import MyImpact from './volunteer/MyImpact'
@@ -92,6 +93,7 @@ export default function VolunteerPortal() {
       <Route index element={<VolunteerDashboard profile={profile} />} />
       <Route path="profile" element={<MyVolunteerProfile showToast={showToast} />} />
       <Route path="assignments" element={<MyAssignments showToast={showToast} />} />
+      <Route path="assignments/visits/:id" element={<HomeVisitDetail showToast={showToast} />} />
       <Route path="opportunities" element={<Opportunities showToast={showToast} />} />
       <Route path="people" element={<MyElderlyMembers />} />
       <Route path="impact" element={<MyImpact />} />

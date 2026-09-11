@@ -175,9 +175,11 @@ def test_elderly_member_snapshot_excludes_sensitive_fields(client, make_user, ma
     client.patch(f"/api/home-visits/{visit['id']}", json={"status": "Started"}, headers=auth_header(vol_token))
     client.patch(
         f"/api/home-visits/{visit['id']}",
-        json={"status": "Completed", "observations": "All good", "support_provided": "Groceries delivered"},
+        json={"observations": "All good", "support_provided": "Groceries delivered"},
         headers=auth_header(vol_token),
     )
+    client.post(f"/api/home-visits/{visit['id']}/submit", headers=auth_header(vol_token))
+    client.post(f"/api/home-visits/{visit['id']}/approve", headers=auth_header(admin_token))
 
     resp = client.get(f"/api/volunteers/me/elderly-members/{member['id']}", headers=auth_header(vol_token))
     assert resp.status_code == 200

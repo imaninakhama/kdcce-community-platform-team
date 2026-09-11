@@ -1,3 +1,5 @@
+import json
+
 from flask import Blueprint, jsonify, request, send_file
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
@@ -10,19 +12,44 @@ from ..assignments.service import (
 from ..auth.decorators import roles_required
 from ..extensions import db
 from ..followups.service import create_from_source
-from ..models import ElderlyMember, HomeVisit, User, VolunteerProfile, utcnow
+from ..models import ElderlyMember, HomeVisit, HomeVisitSubmission, User, VolunteerProfile, utcnow
 from ..notifications.service import notify
 from ..utils import get_or_404, validation_error_response
-from .schemas import HomeVisitAssigneeUpdateSchema, HomeVisitCreateSchema, HomeVisitStaffUpdateSchema
+from .schemas import HomeVisitAssigneeUpdateSchema, HomeVisitCreateSchema, HomeVisitReturnSchema, HomeVisitStaffUpdateSchema
 
 bp = Blueprint("homevisits", __name__, url_prefix="/api/home-visits")
 
 create_schema = HomeVisitCreateSchema()
 staff_update_schema = HomeVisitStaffUpdateSchema()
 assignee_update_schema = HomeVisitAssigneeUpdateSchema()
+return_schema = HomeVisitReturnSchema()
 message_schema = AssignmentMessageCreateSchema()
 review_schema = AssignmentReviewCreateSchema()
 checklist_schema = ChecklistItemUpdateSchema()
+
+# Fields captured as part of the working visit form — snapshotted into a
+# HomeVisitSubmission row on every submit-for-review, so "what did the
+# volunteer actually submit this cycle" survives later edits/resubmits.
+_SNAPSHOT_FIELDS = (
+    "wellbeing", "mood", "blood_pressure_systolic", "blood_pressure_diastolic", "pulse_bpm",
+    "temperature_celsius", "weight_kg", "physical_activity", "basic_needs_confirmed",
+    "observations", "concerns_discussed", "follow_up_required", "follow_up_notes", "support_provided",
+)
+# Statuses in which the volunteer's own record is locked — matches "lock
+# all fields... volunteer cannot edit or delete submitted information"
+# for Under Review, plus the obvious case of an already-approved visit.
+_LOCKED_STATUSES = ("Under Review", "Completed")
+
+
+def _snapshot(visit):
+    return json.dumps({field: getattr(visit, field) for field in _SNAPSHOT_FIELDS})
+
+
+def _latest_submission(visit_id):
+    return (
+        HomeVisitSubmission.query.filter_by(home_visit_id=visit_id)
+        .order_by(HomeVisitSubmission.submitted_at.desc()).first()
+    )
 
 
 def _member_or_400(member_id):
@@ -49,6 +76,15 @@ def _can_access_visit(visit, role, identity):
     if role in ("admin", "staff"):
         return True
     return visit.assigned_to_id == identity and _is_verified_volunteer(identity)
+
+
+def _locked_for_volunteer(visit, role):
+    """Whether a non-admin/staff caller is blocked from changing the
+    checklist/photo while the visit is Under Review or Completed — same
+    lock the PATCH endpoint enforces on the visit's own fields. Admin/
+    staff are never subject to this; they can still correct a record at
+    any stage."""
+    return role not in ("admin", "staff") and visit.status in _LOCKED_STATUSES
 
 
 def _assignee_or_400(user_id):
@@ -180,6 +216,8 @@ def update_visit(visit_id):
             if invalid:
                 return invalid
     elif visit.assigned_to_id == int(get_jwt_identity()) and _is_verified_volunteer(int(get_jwt_identity())):
+        if visit.status in _LOCKED_STATUSES:
+            return jsonify(error=f"This visit is locked while it is '{visit.status}' — no edits are allowed."), 409
         try:
             data = assignee_update_schema.load(payload, partial=True)
         except ValidationError as err:
@@ -187,7 +225,7 @@ def update_visit(visit_id):
     else:
         return jsonify(error="Forbidden"), 403
 
-    if data.get("status") == "Started" and visit.started_at is None:
+    if data.get("status") in ("Started", "In Progress") and visit.started_at is None:
         data["started_at"] = utcnow()
     if data.get("status") == "Completed" and visit.completed_at is None:
         data["completed_at"] = utcnow()
@@ -234,6 +272,136 @@ def accept_visit(visit_id):
     return jsonify(visit=visit.to_dict()), 200
 
 
+@bp.post("/<int:visit_id>/submit")
+@jwt_required()
+def submit_visit(visit_id):
+    """The only path to Under Review — always snapshots the current work
+    fields into a new HomeVisitSubmission row and notifies every
+    admin/staff account (same broadcast pattern as a critical incident;
+    see incidents/routes.py), so a bare status PATCH could never
+    substitute for this. Allowed from the working state or after a
+    Returned-for-Changes correction, matching the workflow's
+    "Returned for Changes -> ... -> Review Submission -> Under Review"
+    cycle."""
+    visit = get_or_404(HomeVisit, visit_id)
+    identity = int(get_jwt_identity())
+    if visit.assigned_to_id != identity or not _is_verified_volunteer(identity):
+        return jsonify(error="Forbidden"), 403
+    if visit.status not in ("Started", "In Progress", "Returned for Changes"):
+        return jsonify(error=f"Cannot submit a visit in '{visit.status}' status for review"), 409
+
+    now = utcnow()
+    visit.status = "Under Review"
+    visit.submitted_at = now
+    visit.returned_at = None
+    visit.return_reason = None
+    visit.return_sections = None
+
+    db.session.add(HomeVisitSubmission(
+        home_visit_id=visit.id, submitted_by_id=identity, submitted_at=now, snapshot=_snapshot(visit),
+    ))
+
+    for admin in User.query.filter(User.role.in_(("admin", "staff"))).all():
+        notify(
+            admin.id, "Home Visit Submitted", "Home visit submitted for review",
+            f"{visit.assigned_to.name} submitted a home visit for {visit.elderly_member.full_name} for your review.",
+            related_resource_type="home_visit", related_resource_id=visit.id,
+        )
+    db.session.commit()
+    return jsonify(visit=visit.to_dict()), 200
+
+
+@bp.post("/<int:visit_id>/approve")
+@roles_required("admin", "staff")
+def approve_visit(visit_id):
+    """The only path to Completed — a volunteer can never set this status
+    directly (see ASSIGNEE_SETTABLE_STATUSES in schemas.py), only
+    admin/staff approving a submitted review. The workflow labels this
+    state "Approved" everywhere in the UI; the stored value stays
+    "Completed" on purpose so every existing dashboard/report/impact view
+    that already counts completed home visits keeps working unchanged."""
+    visit = get_or_404(HomeVisit, visit_id)
+    if visit.status != "Under Review":
+        return jsonify(error="Can only approve a visit that is Under Review"), 409
+
+    now = utcnow()
+    identity = int(get_jwt_identity())
+    visit.status = "Completed"
+    if visit.completed_at is None:
+        visit.completed_at = now
+    visit.reviewed_at = now
+    visit.reviewed_by_id = identity
+
+    submission = _latest_submission(visit.id)
+    if submission is not None:
+        submission.decision = "Approved"
+        submission.decided_at = now
+        submission.decided_by_id = identity
+
+    if visit.assigned_to_id:
+        notify(
+            visit.assigned_to_id, "Home Visit Approved", "Your home visit was approved",
+            f"Your home visit for {visit.elderly_member.full_name} has been reviewed and approved by KDCCE staff.",
+            related_resource_type="home_visit", related_resource_id=visit.id,
+        )
+    db.session.commit()
+    return jsonify(visit=visit.to_dict()), 200
+
+
+@bp.post("/<int:visit_id>/return")
+@roles_required("admin", "staff")
+def return_visit(visit_id):
+    visit = get_or_404(HomeVisit, visit_id)
+    if visit.status != "Under Review":
+        return jsonify(error="Can only return a visit that is Under Review"), 409
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = return_schema.load(payload)
+    except ValidationError as err:
+        return validation_error_response(err)
+
+    now = utcnow()
+    identity = int(get_jwt_identity())
+    sections_json = json.dumps(data["sections"])
+    visit.status = "Returned for Changes"
+    visit.returned_at = now
+    visit.return_reason = data["reason"]
+    visit.return_sections = sections_json
+
+    submission = _latest_submission(visit.id)
+    if submission is not None:
+        submission.decision = "Returned"
+        submission.decided_at = now
+        submission.decided_by_id = identity
+        submission.return_reason = data["reason"]
+        submission.return_sections = sections_json
+
+    if visit.assigned_to_id:
+        notify(
+            visit.assigned_to_id, "Home Visit Returned", "Changes requested on your home visit",
+            f"KDCCE staff requested changes on your home visit for {visit.elderly_member.full_name}: {data['reason'][:200]}",
+            related_resource_type="home_visit", related_resource_id=visit.id,
+        )
+    db.session.commit()
+    return jsonify(visit=visit.to_dict()), 200
+
+
+@bp.get("/<int:visit_id>/submissions")
+@jwt_required()
+def list_visit_submissions(visit_id):
+    """Full submission history — every submit-for-review cycle this visit
+    has been through, most recent first. Same access rule as messages/
+    photo: admin/staff always, the assigned verified volunteer only."""
+    visit = get_or_404(HomeVisit, visit_id)
+    role = get_jwt().get("role")
+    identity = int(get_jwt_identity())
+    if not _can_access_visit(visit, role, identity):
+        return jsonify(error="Forbidden"), 403
+    subs = HomeVisitSubmission.query.filter_by(home_visit_id=visit.id).order_by(HomeVisitSubmission.submitted_at.desc()).all()
+    return jsonify(submissions=[s.to_dict() for s in subs]), 200
+
+
 @bp.post("/<int:visit_id>/photo")
 @jwt_required()
 def upload_visit_photo(visit_id):
@@ -242,6 +410,8 @@ def upload_visit_photo(visit_id):
     identity = int(get_jwt_identity())
     if not _can_access_visit(visit, role, identity):
         return jsonify(error="Forbidden"), 403
+    if _locked_for_volunteer(visit, role):
+        return jsonify(error=f"This visit is locked while it is '{visit.status}'."), 409
 
     try:
         attachment = save_photo("home_visit", visit.id, identity, request.files.get("photo"))
@@ -371,6 +541,8 @@ def update_visit_checklist(visit_id):
     identity = int(get_jwt_identity())
     if not _can_access_visit(visit, role, identity):
         return jsonify(error="Forbidden"), 403
+    if _locked_for_volunteer(visit, role):
+        return jsonify(error=f"This visit is locked while it is '{visit.status}'."), 409
 
     payload = request.get_json(silent=True) or {}
     try:

@@ -77,16 +77,20 @@ def test_upload_valid_webp(client, make_user, make_staff_user, auth_header):
 
 
 def test_completing_without_a_photo_is_fine(client, make_user, make_staff_user, auth_header):
-    """The photo is optional — completing the assignment via the existing
-    PATCH endpoint never requires one, and no attachment row is created
-    unless the volunteer explicitly uploads one."""
+    """The photo is optional — completing the assignment (via submit +
+    admin approval, the only path to Completed now) never requires one,
+    and no attachment row is created unless the volunteer explicitly
+    uploads one."""
     _, admin_token = make_staff_user("admin")
     vol_user, vol_token = _verified_volunteer(client, make_user, auth_header, admin_token)
     visit = _make_visit(client, admin_token, auth_header, vol_user["id"])
 
-    resp = client.patch(f"/api/home-visits/{visit['id']}", json={"status": "Completed", "observations": "All well."}, headers=auth_header(vol_token))
-    assert resp.status_code == 200
-    assert resp.get_json()["visit"]["status"] == "Completed"
+    client.patch(f"/api/home-visits/{visit['id']}", json={"status": "In Progress", "observations": "All well."}, headers=auth_header(vol_token))
+    submit_resp = client.post(f"/api/home-visits/{visit['id']}/submit", headers=auth_header(vol_token))
+    assert submit_resp.status_code == 200
+    approve_resp = client.post(f"/api/home-visits/{visit['id']}/approve", headers=auth_header(admin_token))
+    assert approve_resp.status_code == 200
+    assert approve_resp.get_json()["visit"]["status"] == "Completed"
 
     photo_resp = client.get(f"/api/home-visits/{visit['id']}/photo", headers=auth_header(vol_token))
     assert photo_resp.status_code == 404

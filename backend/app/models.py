@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, timezone
 
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -39,7 +40,17 @@ DONATION_TYPES = ("Cash", "Food", "Equipment")
 DONATION_STATUSES = ("Paid", "Pending", "Received", "Failed")
 DONATION_FREQUENCIES = ("one-time", "monthly")
 HOME_VISIT_PRIORITIES = ("Low", "Medium", "High", "Urgent")
-HOME_VISIT_STATUSES = ("Pending", "Assigned", "Accepted", "Scheduled", "Started", "In Progress", "Completed", "Cancelled")
+HOME_VISIT_STATUSES = (
+    "Pending", "Assigned", "Accepted", "Scheduled", "Started", "In Progress",
+    "Under Review", "Returned for Changes", "Completed", "Cancelled",
+)
+# The fixed set of home-visit-form section keys admin can flag when
+# returning a submission for changes — shared between the return schema
+# (validation) and the frontend (which sections to unlock/highlight).
+HOME_VISIT_RETURN_SECTIONS = (
+    "wellbeing_mood", "vitals", "physical_activity", "basic_needs",
+    "health_observations", "concerns", "follow_up", "visit_notes", "checklist",
+)
 ASSISTANCE_TYPES = (
     "Hospital Accompaniment", "Transportation", "Food Assistance", "Companionship",
     "Home Support", "Other",
@@ -389,6 +400,7 @@ class HomeVisit(db.Model):
     priority = db.Column(db.String(10), nullable=False, default="Medium")
     status = db.Column(db.String(20), nullable=False, default="Pending")
     reason = db.Column(db.Text, nullable=False)
+    instructions = db.Column(db.Text)  # optional staff guidance, distinct from `reason` (the purpose)
     scheduled_at = db.Column(db.DateTime(timezone=True))
     started_at = db.Column(db.DateTime(timezone=True))
     completed_at = db.Column(db.DateTime(timezone=True))
@@ -396,12 +408,34 @@ class HomeVisit(db.Model):
     support_provided = db.Column(db.Text)
     follow_up_required = db.Column(db.Boolean, nullable=False, default=False)
     follow_up_notes = db.Column(db.Text)
+    # Working-visit vitals/observations — captured directly on the visit
+    # (not a HealthRecord) because they're gated by this visit's own
+    # review cycle below, not by the separate, ungated Health module.
+    wellbeing = db.Column(db.String(20))
+    mood = db.Column(db.String(60))
+    blood_pressure_systolic = db.Column(db.Integer)
+    blood_pressure_diastolic = db.Column(db.Integer)
+    pulse_bpm = db.Column(db.Integer)
+    temperature_celsius = db.Column(db.Float)
+    weight_kg = db.Column(db.Float)
+    physical_activity = db.Column(db.Text)
+    basic_needs_confirmed = db.Column(db.Boolean, nullable=False, default=False)
+    concerns_discussed = db.Column(db.Text)
+    # Review-cycle tracking — set only by POST .../submit, .../approve,
+    # .../return (see routes.py), never by the general PATCH.
+    submitted_at = db.Column(db.DateTime(timezone=True))
+    returned_at = db.Column(db.DateTime(timezone=True))
+    return_reason = db.Column(db.Text)
+    return_sections = db.Column(db.Text)  # JSON-encoded list of section keys
+    reviewed_at = db.Column(db.DateTime(timezone=True))
+    reviewed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
 
     elderly_member = db.relationship("ElderlyMember", foreign_keys=[elderly_member_id])
     requested_by = db.relationship("User", foreign_keys=[requested_by_id])
     assigned_to = db.relationship("User", foreign_keys=[assigned_to_id])
+    reviewed_by = db.relationship("User", foreign_keys=[reviewed_by_id])
 
     def to_dict(self):
         return {
@@ -409,12 +443,14 @@ class HomeVisit(db.Model):
             "elderly_member_id": self.elderly_member_id,
             "elderly_member_name": self.elderly_member.full_name if self.elderly_member else None,
             "elderly_member_code": self.elderly_member.member_id if self.elderly_member else None,
+            "elderly_member_location": self.elderly_member.location if self.elderly_member else None,
             "requested_by": self.requested_by.name if self.requested_by else None,
             "assigned_to_id": self.assigned_to_id,
             "assigned_to": self.assigned_to.name if self.assigned_to else None,
             "priority": self.priority,
             "status": self.status,
             "reason": self.reason,
+            "instructions": self.instructions,
             "scheduled_at": self.scheduled_at.isoformat() if self.scheduled_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
@@ -422,6 +458,22 @@ class HomeVisit(db.Model):
             "support_provided": self.support_provided,
             "follow_up_required": self.follow_up_required,
             "follow_up_notes": self.follow_up_notes,
+            "wellbeing": self.wellbeing,
+            "mood": self.mood,
+            "blood_pressure_systolic": self.blood_pressure_systolic,
+            "blood_pressure_diastolic": self.blood_pressure_diastolic,
+            "pulse_bpm": self.pulse_bpm,
+            "temperature_celsius": self.temperature_celsius,
+            "weight_kg": self.weight_kg,
+            "physical_activity": self.physical_activity,
+            "basic_needs_confirmed": self.basic_needs_confirmed,
+            "concerns_discussed": self.concerns_discussed,
+            "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,
+            "returned_at": self.returned_at.isoformat() if self.returned_at else None,
+            "return_reason": self.return_reason,
+            "return_sections": json.loads(self.return_sections) if self.return_sections else [],
+            "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
+            "reviewed_by": self.reviewed_by.name if self.reviewed_by else None,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
@@ -983,6 +1035,43 @@ class AssignmentReview(db.Model):
             "reviewed_by": self.reviewed_by.name if self.reviewed_by else None,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
+        }
+
+
+class HomeVisitSubmission(db.Model):
+    """One row per volunteer submit-for-review cycle on a home visit —
+    the full submission history the admin review screen and the
+    volunteer's post-return "previous submitted values" view both read
+    from. Deliberately its own table rather than a growing JSON blob on
+    HomeVisit: a visit can be returned and resubmitted more than once,
+    and each cycle's snapshot + decision needs to stay distinct."""
+    __tablename__ = "home_visit_submissions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    home_visit_id = db.Column(db.Integer, db.ForeignKey("home_visits.id"), nullable=False, index=True)
+    submitted_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    submitted_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
+    snapshot = db.Column(db.Text, nullable=False)  # JSON blob of the work fields as submitted
+    decision = db.Column(db.String(20))  # "Approved" | "Returned" | None while pending
+    decided_at = db.Column(db.DateTime(timezone=True))
+    decided_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    return_reason = db.Column(db.Text)
+    return_sections = db.Column(db.Text)  # JSON-encoded list of section keys
+
+    submitted_by = db.relationship("User", foreign_keys=[submitted_by_id])
+    decided_by = db.relationship("User", foreign_keys=[decided_by_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "submitted_by": self.submitted_by.name if self.submitted_by else None,
+            "submitted_at": self.submitted_at.isoformat(),
+            "snapshot": json.loads(self.snapshot) if self.snapshot else {},
+            "decision": self.decision,
+            "decided_at": self.decided_at.isoformat() if self.decided_at else None,
+            "decided_by": self.decided_by.name if self.decided_by else None,
+            "return_reason": self.return_reason,
+            "return_sections": json.loads(self.return_sections) if self.return_sections else [],
         }
 
 

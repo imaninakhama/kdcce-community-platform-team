@@ -43,7 +43,7 @@ def test_home_visit_follow_up_defaults_assignee_to_the_visits_assignee(client, m
     vol_user, vol_token = _verified_volunteer(client, make_user, auth_header, token)
     visit = client.post("/api/home-visits", json={"elderly_member_id": member["id"], "reason": "Check", "assigned_to_id": vol_user["id"]}, headers=auth_header(token)).get_json()["visit"]
 
-    resp = client.patch(f"/api/home-visits/{visit['id']}", json={"status": "Completed", "follow_up_required": True, "follow_up_notes": "Needs a nurse visit"}, headers=auth_header(vol_token))
+    resp = client.patch(f"/api/home-visits/{visit['id']}", json={"status": "In Progress", "follow_up_required": True, "follow_up_notes": "Needs a nurse visit"}, headers=auth_header(vol_token))
     assert resp.status_code == 200
 
     followups = client.get("/api/followups", headers=auth_header(token)).get_json()["followups"]

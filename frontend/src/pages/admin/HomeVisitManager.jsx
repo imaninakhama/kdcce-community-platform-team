@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Plus, Pencil } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Search, Plus, Pencil, ClipboardCheck, Eye } from 'lucide-react'
 import Shell from '../../components/admin/Shell'
 import Modal from '../../components/admin/Modal'
 import AssignmentPhoto from '../../components/admin/AssignmentPhoto'
@@ -11,11 +12,11 @@ import DataTable from '../../components/shared/DataTable'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { useApiResource } from '../../lib/useApiResource'
 import { apiFetch } from '../../lib/api'
+import { statusLabel, statusTone } from '../../lib/homeVisitWorkflow'
 
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent']
-const STATUSES = ['Pending', 'Assigned', 'Accepted', 'Scheduled', 'Started', 'In Progress', 'Completed', 'Cancelled']
+const STATUSES = ['Pending', 'Assigned', 'Accepted', 'Scheduled', 'Started', 'In Progress', 'Under Review', 'Returned for Changes', 'Completed', 'Cancelled']
 const PRIORITY_TONE = { Low: 'neutral', Medium: 'info', High: 'warning', Urgent: 'danger' }
-function statusTone(s) { if (s === 'Completed') return 'success'; if (s === 'Cancelled') return 'danger'; if (['Started', 'In Progress'].includes(s)) return 'info'; return 'warning' }
 
 function fmtDate(iso) { return iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—' }
 function toLocalInput(iso) { return iso ? new Date(iso).toISOString().slice(0, 16) : '' }
@@ -96,6 +97,7 @@ function EditVisitModal({ visit, assignees, onClose, onSaved, showToast }) {
       <div className="grid grid-cols-2 gap-4">
         <label className="text-sm font-semibold">Priority<select name="priority" defaultValue={visit.priority} className="input-k mt-2">{PRIORITIES.map(p => <option key={p}>{p}</option>)}</select></label>
         <label className="text-sm font-semibold">Status<select name="status" defaultValue={visit.status} className="input-k mt-2">{STATUSES.map(s => <option key={s}>{s}</option>)}</select></label>
+        <p className="-mt-2 text-xs text-kMuted sm:col-span-2">To approve or return a submitted visit, use the <b>Review</b> action instead — it records the decision correctly and notifies the volunteer.</p>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <label className="text-sm font-semibold">Assign to<select name="assigned_to_id" defaultValue={visit.assigned_to_id || ''} className="input-k mt-2"><option value="">Unassigned</option>{assignees.map(a => <option key={a.id} value={a.id}>{a.name} ({a.role})</option>)}</select></label>
@@ -142,10 +144,15 @@ export default function HomeVisitManager({ showToast }) {
         columns={[
           { key: 'member', header: 'Member', cell: v => <><div className="font-semibold text-kInk">{v.elderly_member_name}</div><div className="text-xs text-kMuted">{v.elderly_member_code}</div></> },
           { key: 'priority', header: 'Priority', cell: v => <StatusBadge tone={PRIORITY_TONE[v.priority]}>{v.priority}</StatusBadge> },
-          { key: 'status', header: 'Status', cell: v => <StatusBadge tone={statusTone(v.status)}>{v.status}</StatusBadge> },
+          { key: 'status', header: 'Status', cell: v => <StatusBadge tone={statusTone(v.status)}>{statusLabel(v.status)}</StatusBadge> },
           { key: 'assigned', header: 'Assigned to', cell: v => <span className="text-kMuted">{v.assigned_to || 'Unassigned'}</span> },
           { key: 'scheduled', header: 'Scheduled', cell: v => <span className="text-kMuted">{fmtDate(v.scheduled_at)}</span> },
-          { key: 'actions', header: 'Actions', cell: v => <button onClick={() => setEditVisit(v)} className="text-kGreen"><Pencil size={16} /></button> },
+          { key: 'actions', header: 'Actions', cell: v => <div className="flex items-center gap-3">
+            {v.status === 'Under Review'
+              ? <Link to={`/admin/home-visits/${v.id}/review`} className="flex items-center gap-1 text-xs font-bold text-kGreen"><ClipboardCheck size={15} /> Review</Link>
+              : <Link to={`/admin/home-visits/${v.id}/review`} className="text-kMuted" title="View"><Eye size={16} /></Link>}
+            <button onClick={() => setEditVisit(v)} className="text-kGreen" title="Quick edit"><Pencil size={16} /></button>
+          </div> },
         ]}
         rows={filtered}
       />

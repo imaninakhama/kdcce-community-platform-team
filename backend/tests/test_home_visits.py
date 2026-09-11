@@ -184,17 +184,23 @@ def test_staff_can_fully_edit_a_visit(client, make_staff_user, auth_header):
 
 
 def test_assigned_volunteer_can_record_outcome(client, make_user, make_staff_user, auth_header):
+    """A volunteer records the outcome via PATCH same as before, but can
+    no longer self-declare Completed — that now requires admin approval
+    (see test_home_visit_review_workflow.py)."""
     _, admin_token = make_staff_user("admin")
     member = _register_member(client, admin_token, auth_header)
     vol_user, vol_token = _verified_volunteer(client, make_user, auth_header, admin_token)
     visit = client.post("/api/home-visits", json={"elderly_member_id": member["id"], "assigned_to_id": vol_user["id"], **VALID_REASON}, headers=auth_header(admin_token)).get_json()["visit"]
 
-    resp = client.patch(f"/api/home-visits/{visit['id']}", json={"status": "Completed", "observations": "Doing well", "support_provided": "Groceries delivered"}, headers=auth_header(vol_token))
+    resp = client.patch(f"/api/home-visits/{visit['id']}", json={"status": "In Progress", "observations": "Doing well", "support_provided": "Groceries delivered"}, headers=auth_header(vol_token))
     assert resp.status_code == 200
     body = resp.get_json()["visit"]
-    assert body["status"] == "Completed"
+    assert body["status"] == "In Progress"
     assert body["observations"] == "Doing well"
-    assert body["completed_at"] is not None
+    assert body["started_at"] is not None
+
+    resp = client.patch(f"/api/home-visits/{visit['id']}", json={"status": "Completed"}, headers=auth_header(vol_token))
+    assert resp.status_code == 400  # "Completed" is no longer a volunteer-settable status
 
 
 def test_assigned_volunteer_cannot_reassign_or_change_priority(client, make_user, make_staff_user, auth_header):
@@ -314,7 +320,7 @@ def test_accept_rejects_invalid_visit_id(client, make_user, auth_header):
     assert resp.status_code == 404
 
 
-def test_assignee_can_progress_and_complete_after_accepting(client, make_user, make_staff_user, auth_header):
+def test_assignee_can_progress_and_submit_after_accepting(client, make_user, make_staff_user, auth_header):
     _, admin_token = make_staff_user("admin")
     member = _register_member(client, admin_token, auth_header)
     vol_user, vol_token = _verified_volunteer(client, make_user, auth_header, admin_token)
@@ -325,9 +331,9 @@ def test_assignee_can_progress_and_complete_after_accepting(client, make_user, m
     assert started.status_code == 200
     assert started.get_json()["visit"]["started_at"] is not None
 
-    completed = client.patch(f"/api/home-visits/{visit['id']}", json={"status": "Completed", "observations": "Doing well"}, headers=auth_header(vol_token))
-    assert completed.status_code == 200
-    assert completed.get_json()["visit"]["status"] == "Completed"
+    submitted = client.post(f"/api/home-visits/{visit['id']}/submit", headers=auth_header(vol_token))
+    assert submitted.status_code == 200
+    assert submitted.get_json()["visit"]["status"] == "Under Review"
 
 
 # ---------- Delete ----------

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { Check, Pencil, Home, HandHeart } from 'lucide-react'
 import VolunteerShell from '../../components/volunteer/VolunteerShell'
 import Modal from '../../components/admin/Modal'
@@ -11,15 +12,12 @@ import EmptyState from '../../components/shared/EmptyState'
 import { LoadingState, ErrorState, errorMessage } from '../../components/admin/adminHelpers'
 import { useVolunteerData } from '../../lib/VolunteerDataContext'
 import { apiFetch } from '../../lib/api'
+import { statusLabel as homeVisitStatusLabel, statusTone as homeVisitStatusTone } from '../../lib/homeVisitWorkflow'
 
 const PRIORITY_TONE = { Low: 'neutral', Medium: 'info', High: 'warning', Urgent: 'danger' }
-function statusTone(s) { if (s === 'Completed') return 'success'; if (s === 'Cancelled') return 'danger'; if (['Started', 'In Progress'].includes(s)) return 'info'; return 'warning' }
+function assistanceStatusTone(s) { if (s === 'Completed') return 'success'; if (s === 'Cancelled') return 'danger'; if (['Started', 'In Progress'].includes(s)) return 'info'; return 'warning' }
 function fmtDate(iso) { return iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not scheduled yet' }
 
-const HOME_VISIT_WORK_FIELDS = [
-  { name: 'observations', label: 'What was done?', placeholder: 'What you observed and did during the visit' },
-  { name: 'support_provided', label: 'Outcome', placeholder: 'Support provided / outcome of the visit' },
-]
 const ASSISTANCE_WORK_FIELDS = [
   { name: 'outcome_notes', label: 'What was done / Outcome', placeholder: 'What happened, how it went', rows: 3 },
 ]
@@ -64,28 +62,25 @@ function UpdateModal({ basePath, assignmentType, workFields, hasChecklist, onClo
   </Modal>
 }
 
-function HomeVisitsTab({ showToast }) {
+function HomeVisitsTab() {
   const { visits, loading, error, reload } = useVolunteerData()
-  const [editId, setEditId] = useState(null)
 
   if (loading) return <LoadingState label="home visits" />
   if (error) return <ErrorState message={error} onRetry={reload} />
 
   return <>
     {visits.length === 0 ? <EmptyState icon={Home} title="No home visits yet" message="Home visits assigned to you will show up here." /> : <div className="grid gap-4">
-      {visits.map(v => <div key={v.id} className="card-k p-5">
+      {visits.map(v => <Link key={v.id} to={`/volunteer/assignments/visits/${v.id}`} className="card-k block p-5 hover:border-kGreen">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2"><span className="font-display text-lg font-bold text-kGreen">{v.elderly_member_name}</span><StatusBadge tone={PRIORITY_TONE[v.priority]}>{v.priority}</StatusBadge></div>
             <p className="mt-1 text-sm text-kMuted">{v.elderly_member_code} &middot; {fmtDate(v.scheduled_at)}</p>
             <p className="mt-3 text-sm text-kInk">{v.reason}</p>
           </div>
-          <div className="flex items-center gap-3"><StatusBadge tone={statusTone(v.status)}>{v.status}</StatusBadge><button onClick={() => setEditId(v.id)} className="text-kGreen"><Pencil size={16} /></button></div>
+          <StatusBadge tone={homeVisitStatusTone(v.status)}>{homeVisitStatusLabel(v.status)}</StatusBadge>
         </div>
-      </div>)}
+      </Link>)}
     </div>}
-
-    {editId && <UpdateModal basePath={`/api/home-visits/${editId}`} assignmentType="home_visit" workFields={HOME_VISIT_WORK_FIELDS} hasChecklist onClose={() => setEditId(null)} onListChanged={reload} showToast={showToast} />}
   </>
 }
 
@@ -117,7 +112,7 @@ function AssistanceTab({ showToast }) {
             <p className="mt-3 text-sm text-kInk">{r.description}</p>
           </div>
           <div className="flex items-center gap-3">
-            <StatusBadge tone={statusTone(r.status)}>{r.status}</StatusBadge>
+            <StatusBadge tone={assistanceStatusTone(r.status)}>{r.status}</StatusBadge>
             {r.status === 'Assigned'
               ? <button disabled={acceptingId === r.id} onClick={() => accept(r)} className="btn-green disabled:opacity-60"><Check size={15} /> Accept</button>
               : <button onClick={() => setEditId(r.id)} className="text-kGreen"><Pencil size={16} /></button>}
@@ -141,6 +136,6 @@ export default function MyAssignments({ showToast }) {
       <button onClick={() => setTab('assistance')} className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${tab === 'assistance' ? 'bg-kGreen text-white' : 'text-kMuted hover:text-kInk'}`}><HandHeart size={14} className="mr-1.5 inline" /> Assistance Requests</button>
     </div>
 
-    <div className="mt-6">{tab === 'visits' ? <HomeVisitsTab showToast={showToast} /> : <AssistanceTab showToast={showToast} />}</div>
+    <div className="mt-6">{tab === 'visits' ? <HomeVisitsTab /> : <AssistanceTab showToast={showToast} />}</div>
   </VolunteerShell>
 }

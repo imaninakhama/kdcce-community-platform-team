@@ -26,6 +26,7 @@ import HealthManager from './admin/HealthManager'
 import MedicationManager from './admin/MedicationManager'
 import VolunteerManager from './admin/VolunteerManager'
 import HomeVisitManager from './admin/HomeVisitManager'
+import HomeVisitReviewScreen from './admin/HomeVisitReviewScreen'
 import DonationsManager from './admin/DonationsManager'
 import FeedingManager from './admin/FeedingManager'
 import InventoryManager from './admin/InventoryManager'
@@ -316,6 +317,7 @@ function AdminDashboardRoutes() {
       <Route path="medication" element={<MedicationManager showToast={showToast} />} />
       <Route path="volunteers" element={<VolunteerManager showToast={showToast} />} />
       <Route path="home-visits" element={<HomeVisitManager showToast={showToast} />} />
+      <Route path="home-visits/:id/review" element={<HomeVisitReviewScreen showToast={showToast} />} />
       <Route path="donations" element={<DonationsManager showToast={showToast} />} />
       <Route path="feeding" element={<FeedingManager showToast={showToast} />} />
       <Route path="inventory" element={<InventoryManager showToast={showToast} />} />
