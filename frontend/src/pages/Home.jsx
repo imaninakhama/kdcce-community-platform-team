@@ -3,7 +3,6 @@ import { ArrowRight, Heart, Users, HandHeart, Link2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { programs } from '../data/siteData'
 import ProgramCard from '../components/ProgramCard'
-import Stats from '../components/Stats'
 import GalleryPreview from '../components/GalleryPreview'
 import VideoShowcase from '../components/VideoShowcase'
 import CtaBanner from '../components/CtaBanner'
@@ -13,11 +12,11 @@ import { useApiList } from '../lib/useApiList'
 export default function Home() {
   const { items: team, loading: teamLoading, error: teamError } = useApiList('/api/team', 'team')
   return <div>
-    <section id="page-hero" className="relative min-h-[690px] overflow-hidden bg-black">
+    <section id="page-hero" className="relative min-h-screen overflow-hidden bg-black">
       <img src="/images/hero.jpg" alt="Older adults smiling together" className="absolute inset-0 h-full w-full object-cover object-center" />
       <div className="hero-overlay absolute inset-0" />
-      <div className="container-k relative flex min-h-[690px] items-center py-20 text-white">
-        <div className="max-w-[620px] pt-16"><div className="mb-5 font-display text-sm font-semibold italic text-kLime">Community. Care. Dignity.</div><h1 className="font-display text-5xl font-bold leading-[1.02] md:text-7xl">Restoring dignity to older persons in Kibera.</h1><p className="mt-6 max-w-xl text-base leading-7 text-white/75 md:text-lg">We build practical support, companionship and pathways to opportunity so elders can live healthier, more connected lives.</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link className="btn-orange" to="/donate"><Heart size={17}/> Donate Now</Link><Link className="btn-outline" to="/become-a-volunteer"><Users size={17}/> Become a Volunteer</Link></div><div className="mt-10 grid max-w-md grid-cols-3 gap-6 border-t border-white/15 pt-5 text-xs text-white/60"><div><b className="block text-xl text-white">35+</b>Associations connected</div><div><b className="block text-xl text-white">8K+</b>Elders supported</div><div><b className="block text-xl text-white">6</b>Core programs</div></div></div>
+      <div className="container-k relative flex min-h-screen items-center py-[clamp(1.5rem,6vh,5rem)] text-white">
+        <div className="max-w-[620px] pt-[clamp(0.5rem,4vh,4rem)]"><div className="mb-[clamp(0.5rem,2vh,1.25rem)] font-display text-sm font-semibold italic text-kLime">Community. Care. Dignity.</div><h1 className="font-display text-4xl font-bold leading-[1.05] sm:text-5xl md:text-7xl">Restoring dignity to older persons in Kibera.</h1><p className="mt-[clamp(0.75rem,3vh,1.5rem)] max-w-xl text-base leading-7 text-white/75 md:text-lg">We build practical support, companionship and pathways to opportunity so elders can live healthier, more connected lives.</p><div className="mt-[clamp(1rem,3vh,2rem)] flex flex-col gap-3 sm:flex-row"><Link className="btn-orange" to="/donate"><Heart size={17}/> Donate Now</Link><Link className="btn-outline" to="/become-a-volunteer"><Users size={17}/> Become a Volunteer</Link></div><div className="mt-[clamp(1rem,3vh,2.5rem)] grid max-w-md grid-cols-3 gap-3 border-t border-white/15 pt-[clamp(0.5rem,2vh,1.25rem)] text-xs text-white/60 sm:gap-6"><div><b className="block text-xl text-white">35+</b>Associations connected</div><div><b className="block text-xl text-white">8K+</b>Elders supported</div><div><b className="block text-xl text-white">6</b>Core programs</div></div></div>
       </div>
     </section>
 
@@ -26,7 +25,6 @@ export default function Home() {
     <section className="container-k grid gap-4 md:grid-cols-3">
       {programs.slice(0,3).map(p => <ProgramCard key={p.title} program={p} />)}
     </section>
-    <Stats />
 
     <section className="container-k grid gap-10 py-24 md:grid-cols-2 md:items-center">
       <div className="relative min-h-[520px]">
