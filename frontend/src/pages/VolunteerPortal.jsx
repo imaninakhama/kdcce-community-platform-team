@@ -4,6 +4,7 @@ import { Clock, RefreshCw, XCircle } from 'lucide-react'
 import ThemeToggle from '../theme/ThemeToggle'
 import { LoadingState, ErrorState, errorMessage, useToast } from '../components/admin/adminHelpers'
 import { apiFetch, getStoredUser, endSession, clearSession, ApiError } from '../lib/api'
+import { useVolunteerHeartbeat } from '../lib/useVolunteerHeartbeat'
 import { VOLUNTEER_STATUS_LABELS, VOLUNTEER_STATUS_STYLES } from '../lib/volunteerStatus'
 import VolunteerDashboard from './volunteer/VolunteerDashboard'
 import MyVolunteerProfile from './volunteer/MyVolunteerProfile'
@@ -39,6 +40,8 @@ export default function VolunteerPortal() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [toast, showToast] = useToast()
+
+  useVolunteerHeartbeat()
 
   const load = useCallback(async () => {
     // Re-checked on every call, not just on mount — "Check my status
