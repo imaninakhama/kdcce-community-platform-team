@@ -117,7 +117,12 @@ def dashboard():
         "critical_open": incidents_q.filter(Incident.status == "Open", Incident.severity == "Critical").count(),
         "follow_up_required": incidents_q.filter(Incident.follow_up_required.is_(True)).count(),
         "recent": [
-            {"id": i.id, "incident_type": i.incident_type, "severity": i.severity, "status": i.status, "occurred_at": i.occurred_at.isoformat(), "elderly_member_name": i.elderly_member.full_name}
+            # elderly_member_id is nullable on Incident (a facility-wide
+            # incident isn't tied to one member) — unlike HomeVisit/
+            # AssistanceRequest/Attendance/HealthRecord below, whose FK is
+            # NOT NULL, so i.elderly_member can genuinely be None here and
+            # must be guarded the same way Incident.to_dict() already does.
+            {"id": i.id, "incident_type": i.incident_type, "severity": i.severity, "status": i.status, "occurred_at": i.occurred_at.isoformat(), "elderly_member_name": i.elderly_member.full_name if i.elderly_member else None}
             for i in recent_incidents
         ],
     }

@@ -1,8 +1,9 @@
 import os
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
+from werkzeug.exceptions import HTTPException
 
 from .config import Config, TestingConfig
 from .extensions import cors, db, jwt, limiter, migrate
@@ -122,6 +123,22 @@ def _register_error_handlers(app):
     @app.errorhandler(413)
     def _payload_too_large(err):
         return jsonify(error="Payload too large"), 413
+
+    @app.errorhandler(Exception)
+    def _unhandled_exception(err):
+        # HTTPException covers every intentional abort()/error response
+        # already in the app (400s/401/403/404/etc, including the two
+        # handlers above) — those already have their own clean JSON shape
+        # and must pass through unchanged. Only a genuinely unexpected
+        # exception (a bug — e.g. an unguarded None attribute access, a
+        # DB error) should ever reach here, so it's the one place that
+        # needs to both log the real cause for debugging and make sure
+        # the client still gets the app's normal JSON error shape instead
+        # of Werkzeug's default HTML error page.
+        if isinstance(err, HTTPException):
+            return err
+        app.logger.exception("Unhandled exception on %s %s", request.method, request.path)
+        return jsonify(error="Something went wrong. Please try again."), 500
 
 
 def _register_hooks(app):
