@@ -42,6 +42,15 @@ export default function Carousel({ items, renderItem, ariaLabel = 'Carousel' }) 
 
   const maxIndex = Math.max(0, items.length - cardsPerView)
   const canScroll = items.length > cardsPerView
+  // Recomputed on every render from index/cardsPerView/items.length, all
+  // already-reactive state — so this stays correct automatically after
+  // any scroll (index changes) or viewport resize (cardsPerView changes)
+  // with no extra effect needed. Kept fully separate from goPrev/goNext
+  // below, which still wrap around exactly as before — an arrow simply
+  // isn't shown at the boundary it would wrap from, rather than the
+  // underlying step/wrap behavior itself changing.
+  const showPrev = canScroll && index > 0
+  const showNext = canScroll && index < maxIndex
 
   // Clamp whenever the visible count or item count changes (e.g. rotating
   // a phone, or more stories being added later) so the track never sits
@@ -81,8 +90,9 @@ export default function Carousel({ items, renderItem, ariaLabel = 'Carousel' }) 
   return (
     <div role="region" aria-roledescription="carousel" aria-label={ariaLabel} className="flex items-stretch gap-2 sm:gap-4" onKeyDown={handleKeyDown}>
       <button
-        type="button" onClick={goPrev} disabled={!canScroll} aria-label="Previous stories"
-        className="grid h-9 w-9 shrink-0 place-items-center self-center rounded-full border border-kBorder bg-kSurface text-kGreen shadow-soft transition hover:bg-kTint hover:text-kOrange disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-kSurface disabled:hover:text-kGreen dark:shadow-none sm:h-11 sm:w-11"
+        type="button" onClick={goPrev} aria-label="Previous stories"
+        aria-hidden={!showPrev} tabIndex={showPrev ? 0 : -1}
+        className={`grid h-9 w-9 shrink-0 place-items-center self-center rounded-full border border-kBorder bg-kSurface text-kGreen shadow-soft transition hover:bg-kTint hover:text-kOrange dark:shadow-none sm:h-11 sm:w-11 ${showPrev ? '' : 'invisible pointer-events-none'}`}
       >
         <ChevronLeft size={20} />
       </button>
@@ -105,8 +115,9 @@ export default function Carousel({ items, renderItem, ariaLabel = 'Carousel' }) 
       </div>
 
       <button
-        type="button" onClick={goNext} disabled={!canScroll} aria-label="Next stories"
-        className="grid h-9 w-9 shrink-0 place-items-center self-center rounded-full border border-kBorder bg-kSurface text-kGreen shadow-soft transition hover:bg-kTint hover:text-kOrange disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-kSurface disabled:hover:text-kGreen dark:shadow-none sm:h-11 sm:w-11"
+        type="button" onClick={goNext} aria-label="Next stories"
+        aria-hidden={!showNext} tabIndex={showNext ? 0 : -1}
+        className={`grid h-9 w-9 shrink-0 place-items-center self-center rounded-full border border-kBorder bg-kSurface text-kGreen shadow-soft transition hover:bg-kTint hover:text-kOrange dark:shadow-none sm:h-11 sm:w-11 ${showNext ? '' : 'invisible pointer-events-none'}`}
       >
         <ChevronRight size={20} />
       </button>
