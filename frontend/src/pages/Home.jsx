@@ -7,6 +7,7 @@ import GalleryPreview from '../components/GalleryPreview'
 import VideoShowcase from '../components/VideoShowcase'
 import CtaBanner from '../components/CtaBanner'
 import ImpactStoriesSection from '../components/ImpactStoriesSection'
+import MissionVisionSection from '../components/MissionVisionSection'
 import { useApiList } from '../lib/useApiList'
 
 export default function Home() {
@@ -34,6 +35,22 @@ export default function Home() {
       </div>
       <div><div className="eyebrow">About KDCCE</div><h2 className="mt-3 font-display text-4xl font-bold leading-tight text-kGreen">Helping older persons live with dignity.</h2><p className="mt-5 text-base leading-7 text-kMuted">This course-project design reimagines a community-centered website for an organization serving older persons in Kibera. It combines warm storytelling with clear pathways for donations, volunteering and practical support.</p><div className="mt-8 grid gap-5 sm:grid-cols-2"><div><div className="mb-2 flex items-center gap-2 font-semibold text-kGreen"><HandHeart size={19} className="text-kOrange"/> Our Mission</div><p className="text-sm leading-6 text-kMuted">Provide care, connection and advocacy through food, wellness, learning and community activities.</p></div><div><div className="mb-2 flex items-center gap-2 font-semibold text-kGreen"><Heart size={19} className="text-kOrange"/> Our Vision</div><p className="text-sm leading-6 text-kMuted">A society where older persons are respected, included and able to access essential services.</p></div></div><Link to="/about" className="btn-orange mt-8">Learn More About Us <ArrowRight size={16}/></Link></div>
     </section>
+
+    <MissionVisionSection
+      title="Our Mission"
+      description="To provide care, support, and advocacy for older persons in Kibera by offering essential services such as food, healthcare, emotional support, and community engagement programs. We strive to create a safe and nurturing environment where the elderly can age gracefully with dignity and respect."
+      image="/images/health-checkup.jpg"
+      imageAlt="A KDCCE health worker checking on an elderly community member"
+      imagePosition="right"
+    />
+    <MissionVisionSection
+      title="OUR VISION"
+      description="A society where older persons in Kibera live with dignity, respect, and access to essential services, ensuring their well-being and inclusion in the community."
+      supportingText="Old age is a continuous life process."
+      image="/images/program-elderly.jpg"
+      imageAlt="An elderly community member supported by KDCCE"
+      imagePosition="left"
+    />
 
     <section className="bg-kCream py-20"><div className="container-k"><div className="mb-10 flex items-end justify-between"><div><div className="eyebrow">What we do</div><h2 className="mt-2 font-display text-4xl font-bold text-kGreen">Our programs</h2></div><Link to="/programs" className="hidden items-center gap-2 font-semibold text-kOrange sm:flex">See all programs <ArrowRight size={16}/></Link></div><div className="grid gap-5 md:grid-cols-3">{programs.slice(3,6).map(p=><ProgramCard key={p.title} program={p} />)}</div></div></section>
 

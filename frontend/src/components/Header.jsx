@@ -10,6 +10,7 @@ const nav = [
   ['Programs', '/programs'],
   ['Gallery', '/gallery'],
   ['Get Involved', '/sponsor'],
+  ['Adopt a Granny', '/adopt-a-granny'],
   ['Contact', '/contact']
 ]
 
