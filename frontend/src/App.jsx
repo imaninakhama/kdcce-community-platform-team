@@ -8,6 +8,7 @@ import Programs from './pages/Programs'
 import ProgramDetail from './pages/ProgramDetail'
 import Gallery from './pages/Gallery'
 import Sponsor from './pages/Sponsor'
+import AdoptAGranny from './pages/AdoptAGranny'
 import Donate from './pages/Donate'
 import Contact from './pages/Contact'
 import BecomeAVolunteer from './pages/BecomeAVolunteer'
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/programs/:id" element={<ProgramDetail />} />
         <Route path="/gallery" element={<Gallery />} />
         <Route path="/sponsor" element={<Sponsor />} />
+        <Route path="/adopt-a-granny" element={<AdoptAGranny />} />
         <Route path="/donate" element={<Donate />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/become-a-volunteer" element={<BecomeAVolunteer />} />
