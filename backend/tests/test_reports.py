@@ -1,6 +1,6 @@
-import datetime
-
 import pytest
+
+from app.models import utcnow
 
 
 def _register_member(client, token, auth_header, name="Mary Achieng", **extra):
@@ -93,7 +93,7 @@ def test_attendance_report_counts_and_by_day(client, make_staff_user, auth_heade
     assert body["registered_count"] == 2
     assert body["total_records"] == 2
     assert body["still_checked_in"] == 2
-    today = datetime.date.today().isoformat()
+    today = utcnow().date().isoformat()
     assert body["by_day"] == [{"date": today, "count": 2}]
     assert body["highest_day"] == 2
     assert body["lowest_day"] == 2

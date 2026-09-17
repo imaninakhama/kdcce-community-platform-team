@@ -29,7 +29,7 @@ def check_in():
     if member is None:
         return jsonify(error="Validation failed", details={"elderly_member_id": ["Elderly member not found"]}), 400
 
-    today = date.today()
+    today = utcnow().date()
     open_record = Attendance.query.filter_by(
         elderly_member_id=member.id, attendance_date=today, check_out_at=None
     ).first()

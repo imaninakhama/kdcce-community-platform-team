@@ -1,5 +1,7 @@
 import datetime
 
+from app.models import utcnow
+
 
 def _register_member(client, token, auth_header, name="Mary Achieng"):
     resp = client.post("/api/elderly", json={"full_name": name, "gender": "Female"}, headers=auth_header(token))
@@ -51,7 +53,7 @@ def test_trend_series_are_zero_filled_and_ordered(client, make_staff_user, auth_
     assert all(d["count"] == 0 for d in trend)
     # The last entry must be today, not some other day — proves the window
     # is anchored correctly, not just "any 7 consecutive dates."
-    assert trend[-1]["date"] == datetime.date.today().isoformat()
+    assert trend[-1]["date"] == utcnow().date().isoformat()
 
 
 def test_donations_trend_series_does_not_crash(client, monkeypatch, make_staff_user, auth_header):
@@ -67,7 +69,7 @@ def test_donations_trend_series_does_not_crash(client, monkeypatch, make_staff_u
     assert resp.status_code == 200
     trend = resp.get_json()["dashboard"]["feeding_resources"]["donations_trend_14d"]
     assert len(trend) == 14
-    today_entry = next(d for d in trend if d["date"] == datetime.date.today().isoformat())
+    today_entry = next(d for d in trend if d["date"] == utcnow().date().isoformat())
     assert today_entry["count"] == 1
 
 

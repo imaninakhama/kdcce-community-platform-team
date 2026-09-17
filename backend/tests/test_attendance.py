@@ -71,16 +71,19 @@ def test_can_check_in_again_after_checkout(client, make_staff_user, auth_header)
 
 def test_list_attendance_filters_by_date(client, make_staff_user, auth_header):
     import datetime
+
+    from app.models import utcnow
+
     _, token = make_staff_user("admin")
     member = _register_member(client, token, auth_header)
     client.post("/api/attendance/check-in", json={"elderly_member_id": member["id"]}, headers=auth_header(token))
 
-    today = datetime.date.today().isoformat()
+    today = utcnow().date().isoformat()
     resp = client.get(f"/api/attendance?date={today}", headers=auth_header(token))
     assert resp.status_code == 200
     assert len(resp.get_json()["attendance"]) == 1
 
-    tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+    tomorrow = (utcnow().date() + datetime.timedelta(days=1)).isoformat()
     empty = client.get(f"/api/attendance?date={tomorrow}", headers=auth_header(token))
     assert empty.get_json()["attendance"] == []
 
