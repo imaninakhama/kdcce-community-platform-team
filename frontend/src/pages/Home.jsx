@@ -14,7 +14,7 @@ export default function Home() {
   const { items: team, loading: teamLoading, error: teamError } = useApiList('/api/team', 'team')
   return <div>
     <section id="page-hero" className="relative min-h-screen overflow-hidden bg-black">
-      <img src="/images/hero.jpg" alt="Older adults smiling together" className="absolute inset-0 h-full w-full object-cover object-center" />
+      <img src="/images/hero.jpg" alt="Two men standing beside a large cooking pot under the Kibera Daycare Centre for the Elderly banner" className="absolute inset-0 h-full w-full object-cover object-center" />
       <div className="hero-overlay absolute inset-0" />
       <div className="container-k relative flex min-h-screen items-center py-[clamp(1.5rem,6vh,5rem)] text-white">
         <div className="max-w-[620px] pt-[clamp(0.5rem,4vh,4rem)]"><div className="mb-[clamp(0.5rem,2vh,1.25rem)] font-display text-sm font-semibold italic text-kLime">Community. Care. Dignity.</div><h1 className="font-display text-4xl font-bold leading-[1.05] sm:text-5xl md:text-7xl">Restoring dignity to older persons in Kibera.</h1><p className="mt-[clamp(0.75rem,3vh,1.5rem)] max-w-xl text-base leading-7 text-white/75 md:text-lg">We build practical support, companionship and pathways to opportunity so elders can live healthier, more connected lives.</p><div className="mt-[clamp(1rem,3vh,2rem)] flex flex-col gap-3 sm:flex-row"><Link className="btn-orange" to="/donate"><Heart size={17}/> Donate Now</Link><Link className="btn-outline" to="/become-a-volunteer"><Users size={17}/> Become a Volunteer</Link></div><div className="mt-[clamp(1rem,3vh,2.5rem)] grid max-w-md grid-cols-3 gap-3 border-t border-white/15 pt-[clamp(0.5rem,2vh,1.25rem)] text-xs text-white/60 sm:gap-6"><div><b className="block text-xl text-white">35+</b>Associations connected</div><div><b className="block text-xl text-white">8K+</b>Elders supported</div><div><b className="block text-xl text-white">6</b>Core programs</div></div></div>
@@ -29,7 +29,7 @@ export default function Home() {
 
     <section className="container-k grid gap-10 py-24 md:grid-cols-2 md:items-center">
       <div className="relative min-h-[520px]">
-        <div className="absolute left-0 top-8 h-[330px] w-[68%] overflow-hidden rounded-2xl"><img className="h-full w-full object-cover" src="/images/community.jpg" alt="Older people gathered in the community" /></div>
+        <div className="absolute left-0 top-8 h-[330px] w-[68%] overflow-hidden rounded-2xl"><img className="h-full w-full object-cover" src="/images/community.jpg" alt="Older adults gathered indoors listening to a speaker" /></div>
         <div className="absolute bottom-4 right-0 h-[280px] w-[54%] overflow-hidden rounded-2xl border-8 border-white shadow-soft"><img className="h-full w-full object-cover" src="/images/mary.jpg" alt="Older community member" /></div>
         <div className="absolute left-0 bottom-0 grid h-28 w-28 grid-cols-5 gap-2 opacity-75">{Array.from({length: 25}).map((_, i)=><span key={i} className="h-1 w-1 rounded-full bg-kOrange" />)}</div>
       </div>
@@ -40,7 +40,7 @@ export default function Home() {
       title="Our Mission"
       description="To provide care, support, and advocacy for older persons in Kibera by offering essential services such as food, healthcare, emotional support, and community engagement programs. We strive to create a safe and nurturing environment where the elderly can age gracefully with dignity and respect."
       image="/images/health-checkup.jpg"
-      imageAlt="A KDCCE health worker checking on an elderly community member"
+      imageAlt="A KDCCE volunteer checking on an elder's home and livelihood during a home visit"
       imagePosition="right"
     />
     <MissionVisionSection
@@ -48,7 +48,7 @@ export default function Home() {
       description="A society where older persons in Kibera live with dignity, respect, and access to essential services, ensuring their well-being and inclusion in the community."
       supportingText="Old age is a continuous life process."
       image="/images/program-elderly.jpg"
-      imageAlt="An elderly community member supported by KDCCE"
+      imageAlt="Older community members at an advocacy event for the rights of older persons"
       imagePosition="left"
     />
 
