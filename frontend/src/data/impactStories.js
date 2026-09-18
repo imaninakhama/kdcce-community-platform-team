@@ -18,7 +18,7 @@ export const impactStories = [
     title: 'Volunteers at the Heart of Community Support',
     category: 'Volunteering',
     image: '/images/stories/volunteers-heart-of-community-support.jpg',
-    imageAlt: 'A smiling volunteer standing beside stacked boxes of community aid supplies',
+    imageAlt: 'A volunteer and a community member standing together at a community program',
     summary: 'Behind every successful outreach is a team of people willing to serve. Volunteers help organize, prepare, and distribute essential support while bringing energy, compassion, and dignity to every community activity.',
     intro: 'Behind every successful outreach is a team of people willing to serve.',
     body: [
@@ -34,7 +34,7 @@ export const impactStories = [
     title: 'Working Together to Reach More Families',
     category: 'Volunteering',
     image: '/images/stories/working-together-to-reach-more-families.jpg',
-    imageAlt: 'Volunteers and community members working together outdoors to prepare and pack supply boxes',
+    imageAlt: 'Community members and a child gathered together during a home visit',
     summary: 'Community impact takes teamwork. From preparing packages to coordinating distribution, volunteers work together behind the scenes so support can reach families efficiently and respectfully.',
     intro: 'Community impact takes teamwork.',
     body: [
@@ -50,7 +50,7 @@ export const impactStories = [
     title: 'Delivering Food Support With Dignity',
     category: 'Community Impact',
     image: '/images/stories/delivering-food-support-with-dignity.jpg',
-    imageAlt: 'Community members kneeling on the ground to receive and pack food supplies into bags',
+    imageAlt: 'An older woman preparing food over a cooking pot',
     summary: 'Access to food can make a meaningful difference for families facing difficult circumstances. Community distributions help ensure essential supplies reach people who need them while creating moments of connection and care.',
     intro: 'Access to food can make a meaningful difference for families facing difficult circumstances.',
     body: [

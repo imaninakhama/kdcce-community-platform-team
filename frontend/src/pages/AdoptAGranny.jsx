@@ -89,7 +89,7 @@ export default function AdoptAGranny() {
       subheading="We hope to build meaningful relationships where individuals, both locally and internationally, commit to supporting one elderly person living in Kibera."
       paragraph="This initiative connects families across communities while helping older persons access dignity, care, and essential support in daily life."
       image="/images/community-gratitude.jpg"
-      imageAlt="Elderly women in Kibera receiving community support"
+      imageAlt="Older community members sharing an expressive moment together"
       primaryCta={{ label: 'Support a Granny', to: '/donate?frequency=monthly' }}
       secondaryCta={{ label: 'Learn More', href: '#about-program' }}
     />
@@ -106,7 +106,7 @@ export default function AdoptAGranny() {
         description="The Adopt a Granny initiative seeks to create a supportive relationship between an elderly person living in Kibera and an individual supporter, either locally or internationally. The goal is to connect more families together while helping older persons access care, dignity, and practical support according to their needs."
         supportingText="Support can be received as needs arise and may include food, healthcare, emotional support, home-based care, and other essential assistance."
         image="/images/wheelchair-care.jpg"
-        imageAlt="A KDCCE caregiver supporting an elderly woman"
+        imageAlt="An elderly woman moving joyfully during a group activity"
         imagePosition="right"
       />
     </div>
@@ -119,7 +119,7 @@ export default function AdoptAGranny() {
     />
 
     <section className="container-k grid gap-12 py-20 md:grid-cols-2 md:items-center">
-      <img src="/images/feeding.jpg" alt="A group of elderly women in Kibera together" className="order-2 h-[420px] w-full rounded-2xl object-cover md:order-1" />
+      <img src="/images/feeding.jpg" alt="A group of older men and women gathered together indoors" className="order-2 h-[420px] w-full rounded-2xl object-cover md:order-1" />
       <div className="order-1 md:order-2">
         <div className="eyebrow">Central Question</div>
         <div className="mt-4 rounded-2xl border-l-4 border-kOrange bg-kCream p-6">
